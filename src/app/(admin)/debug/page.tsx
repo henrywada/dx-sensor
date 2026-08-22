@@ -14,7 +14,7 @@ export default async function DebugHomePage() {
     .order("created_at", { ascending: false });
 
   return (
-    <main style={{ padding: "2rem", fontFamily: "sans-serif" }}>
+    <main style={{ padding: "2rem" }}>
       <h1>dx-sensor: Supabase接続確認</h1>
 
       {error && (

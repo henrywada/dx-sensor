@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+@theme {
+  --color-paper: #f3f5f4;
+  --color-ink: #14181b;
+  --color-ink-soft: #4b5563;
+  --color-line: #d8dedc;
+  --color-signal: #0e7c86;
+  --color-signal-soft: #e4f1f1;
+  --color-alert: #c4622d;
+  --color-alert-soft: #f6e6db;
+
+  /* Noto Sans JP for Japanese text, Inter for English/numeric text.
+     Both are stacked in --font-sans so the browser picks whichever
+     glyphs it needs from either face automatically. */
+  --font-sans: var(--font-noto-sans-jp), var(--font-inter), "Hiragino Kaku Gothic ProN", sans-serif;
+  --font-en: var(--font-inter), sans-serif;
+}
+
+@layer base {
+  html {
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+  }
+  body {
+    font-family: var(--font-sans);
+  }
+}
+
+/* Signature element: a thin signal-colored line that sweeps in from the left
+   on hover/focus, evoking a rangefinder/scan reticle locking onto a target.
+   Used sparingly — only on interactive cards — everything else stays quiet. */
+@layer components {
+  .scan-card {
+    position: relative;
+    overflow: hidden;
+  }
+  .scan-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 2px;
+    width: 100%;
+    background: var(--color-signal);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.35s ease;
+  }
+  .scan-card:hover::before,
+  .scan-card:focus-visible::before {
+    transform: scaleX(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scan-card::before {
+    transition: none;
+  }
+}

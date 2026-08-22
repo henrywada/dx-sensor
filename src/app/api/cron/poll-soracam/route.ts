@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceSupabase } from "@/lib/supabase/server";
+import { resolveSecret } from "@/lib/supabase/secrets";
 import { getCameraDriver, isCloudReachable } from "@/lib/sensors/factory";
 import { frameDiffScore } from "@/lib/change-detection/frameDiff";
 import { recognizePlate } from "@/lib/image-analysis/plate-recognizer/plateRecognizer";
@@ -43,8 +44,6 @@ export async function GET(req: NextRequest) {
 
       const driver = getCameraDriver(camera.vendor as any);
 
-      // TODO: resolve camera.soracam_secret_ref -> actual authKeySecret via your secret store,
-      // same pattern as resolveSecret() used for ONVIF camera passwords.
       const authKeySecret = await resolveSecret(camera.soracam_secret_ref);
 
       const frame = await driver.getSnapshot({
@@ -113,9 +112,4 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({ results });
-}
-
-async function resolveSecret(secretRef: string | null): Promise<string> {
-  // Placeholder — wire up to your actual secret storage (same TODO as the ONVIF cron route).
-  throw new Error(`resolveSecret() not implemented for ref: ${secretRef}`);
 }
