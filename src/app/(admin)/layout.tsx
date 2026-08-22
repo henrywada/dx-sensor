@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { AdminHeader } from "@/components/layout/AdminHeader";
+import { AppHeader } from "@/components/layout/AppHeader";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { getViewerContext } from "@/lib/auth/getViewerContext";
 
@@ -18,7 +18,7 @@ export default async function AdminLayout({
 
   return (
     <div className="flex min-h-screen flex-col bg-paper">
-      <AdminHeader />
+      <AppHeader variant="admin" />
       <main className="flex flex-1">{children}</main>
       <SiteFooter fullWidth />
     </div>

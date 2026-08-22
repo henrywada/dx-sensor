@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { SiteHeader } from "@/components/layout/SiteHeader";
+import { AppHeader } from "@/components/layout/AppHeader";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { getViewerContext } from "@/lib/auth/getViewerContext";
 
@@ -17,7 +17,7 @@ export default async function TenantLayout({
 
   return (
     <div className="flex min-h-screen flex-col bg-paper">
-      <SiteHeader isDeveloper={isDeveloper} email={email} />
+      <AppHeader variant="tenant" isDeveloper={isDeveloper} email={email} />
       <main className="flex-1">{children}</main>
       <SiteFooter />
     </div>
