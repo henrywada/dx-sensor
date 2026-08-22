@@ -20,7 +20,9 @@ export async function recognizePlate(imageBuffer: Buffer): Promise<AnprResult> {
   if (!apiKey) throw new Error("PLATE_RECOGNIZER_API_KEY is not set");
 
   const form = new FormData();
-  form.append("upload", new Blob([imageBuffer]), "snapshot.jpg");
+  // Wrap in Uint8Array: Node's Buffer type (ArrayBufferLike) isn't structurally
+  // assignable to the DOM BlobPart type under strict TS, but Uint8Array is.
+  form.append("upload", new Blob([new Uint8Array(imageBuffer)]), "snapshot.jpg");
   // mmc=1 requests vehicle make/model/color (billed at +50% per Plate Recognizer pricing)
   form.append("mmc", "1");
 

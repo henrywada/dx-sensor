@@ -8,18 +8,37 @@
  * "develop on Tapo, run production on Reolink" strategy.
  */
 
-export type CameraVendor = "tapo" | "reolink" | "other";
+export type CameraVendor = "tapo" | "reolink" | "soracam" | "other";
 
+/**
+ * Two very different connection shapes are needed depending on vendor:
+ *  - ONVIF vendors (tapo/reolink): host/port/username/password on the LAN.
+ *    These are only reachable from a local agent (see agent/), never from
+ *    the cloud directly.
+ *  - soracam: no LAN address at all. Auth is via SORACOM API credentials
+ *    (Auth Key ID/Secret) plus the SoraCam device ID. Reachable directly
+ *    from the cloud (Vercel Cron etc.) since SORACOM's API is public.
+ * Both shapes are folded into one CameraConfig so CameraDriver stays a
+ * single interface; each driver only reads the fields it needs.
+ */
 export interface CameraConfig {
   id: string;
   tenantId: string;
   vendor: CameraVendor;
-  host: string;
-  port: number;
-  username: string;
+
+  // --- ONVIF vendors (tapo/reolink) ---
+  host?: string;
+  port?: number;
+  username?: string;
   /** Resolved secret (password), fetched separately from `secret_ref` — never stored in DB directly. */
-  password: string;
+  password?: string;
   onvifProfileToken?: string;
+
+  // --- soracam ---
+  soracamDeviceId?: string;
+  soracamAuthKeyId?: string;
+  /** Resolved secret, same non-persistence rule as `password` above. */
+  soracamAuthKeySecret?: string;
 }
 
 export interface SnapshotResult {
