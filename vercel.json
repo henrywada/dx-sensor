@@ -1,8 +1,8 @@
 {
   "crons": [
     {
-      "path": "/api/cron/poll-cameras",
-      "schedule": "*/5 * * * *"
+      "path": "/api/cron/poll-soracam",
+      "schedule": "0 0 * * *"
     }
   ]
 }

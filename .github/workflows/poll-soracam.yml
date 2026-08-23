@@ -1,0 +1,22 @@
+name: Poll SoraCam cameras
+
+# GitHub Actions cron granularity is 5 minutes minimum.
+# This exists specifically to work around Vercel Hobby plan's Cron
+# restriction (max once/day) — see docs/agent-provisioning-checklist.md
+# and CLAUDE.md for the full context. Once/if the project moves to
+# Vercel Pro, this workflow can be disabled in favor of vercel.json's
+# native Cron at a tighter interval.
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {} # allows manual "Run workflow" from the Actions tab for testing
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call poll-soracam endpoint
+        run: |
+          curl -sf -X GET "${{ secrets.DEPLOY_URL }}/api/cron/poll-soracam" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -w "\nHTTP %{http_code}\n"
