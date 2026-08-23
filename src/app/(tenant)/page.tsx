@@ -1,4 +1,4 @@
-import { Camera, ScanLine, LineChart, Settings2 } from "lucide-react";
+import { Camera, ScanLine, LineChart, Settings2, Upload } from "lucide-react";
 import { AppCard, type AppCardProps } from "@/components/ui/AppCard";
 
 interface Category {
@@ -7,14 +7,23 @@ interface Category {
 }
 
 /**
- * Placeholder catalog — dx-sensor's tenant-facing apps aren't built yet
- * (only the parking/ANPR data pipeline exists so far, with no tenant UI on
- * top of it). Cards without an `href` render disabled with a "準備中" badge.
- * Wire up `href` as each app's page is built; add new categories/cards here
- * as new observation use cases go live (per the "any observation target"
- * concept — this list is meant to grow beyond parking).
+ * Tenant-facing app catalog. Cards without an `href` render disabled with a
+ * "準備中" badge. Wire up `href` as each app's page is built; add new
+ * categories/cards here as new observation use cases go live (per the
+ * "any observation target" concept — this list is meant to grow beyond parking).
  */
 const categories: Category[] = [
+  {
+    label: "データを取り込む",
+    apps: [
+      {
+        icon: Upload,
+        title: "手動撮影アップロード",
+        description: "スマホのカメラで撮影した写真をその場でアップロードします。",
+        href: "/capture",
+      },
+    ],
+  },
   {
     label: "カメラ画像で分析",
     apps: [
