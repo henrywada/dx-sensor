@@ -1,4 +1,4 @@
-import { Camera, ScanLine, LineChart, Settings2, Upload } from "lucide-react";
+import { Camera, ScanLine, LineChart, Settings2, Sparkles, Upload } from "lucide-react";
 import { AppCard, type AppCardProps } from "@/components/ui/AppCard";
 
 interface Category {
@@ -27,6 +27,12 @@ const categories: Category[] = [
   {
     label: "カメラ画像で分析",
     apps: [
+      {
+        icon: Sparkles,
+        title: "画像解析",
+        description: "保存済みの画像にAI解析を実行し、命令に応じた結果を確認します。",
+        href: "/analyze",
+      },
       {
         icon: Camera,
         title: "駐車場モニタリング",

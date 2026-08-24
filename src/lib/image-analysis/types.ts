@@ -1,0 +1,25 @@
+export type VisionProviderId =
+  | "claude"
+  | "gpt-4o"
+  | "gpt-5"
+  | "gemini"
+  | "plate-recognizer";
+
+export interface VisionProviderMeta {
+  id: VisionProviderId;
+  label: string;
+  requiresPrompt: boolean;
+}
+
+export interface VisionAnalyzeInput {
+  imageBuffer: Buffer;
+  mimeType: string;
+  prompt: string;
+}
+
+export interface VisionAnalyzeResult {
+  text: string;
+  raw?: unknown;
+}
+
+export type FetchImpl = (url: string, init?: RequestInit) => Promise<Response>;
