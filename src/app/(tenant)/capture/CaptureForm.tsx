@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -57,7 +58,15 @@ export function CaptureForm({ tenantId, userId }: CaptureFormProps) {
 
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4 p-6">
-      <h1 className="text-lg font-semibold text-ink">写真を撮影</h1>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-lg font-semibold text-ink">写真を撮影</h1>
+        <Link
+          href="/"
+          className="shrink-0 text-sm font-medium text-signal transition-colors hover:text-ink"
+        >
+          ←戻る
+        </Link>
+      </div>
       <p className="text-sm text-ink/70">
         カメラを起動して1枚撮影すると、自動的にアップロードされます。
       </p>
