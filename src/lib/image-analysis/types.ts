@@ -20,6 +20,8 @@ export interface VisionAnalyzeInput {
 export interface VisionAnalyzeResult {
   text: string;
   raw?: unknown;
+  /** 消費概算コスト（円）。算出できない場合は null/undefined */
+  estimatedCostYen?: number | null;
 }
 
 export type FetchImpl = (url: string, init?: RequestInit) => Promise<Response>;

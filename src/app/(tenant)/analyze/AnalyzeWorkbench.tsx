@@ -8,6 +8,7 @@ import {
   getProviderMeta,
   type VisionProviderId,
 } from "@/lib/image-analysis/providers";
+import { formatCostYen } from "@/lib/image-analysis/estimateCostYen";
 import { createClient } from "@/lib/supabase/client";
 
 interface AnalyzeWorkbenchProps {
@@ -31,6 +32,7 @@ type AnalysisHistoryEntry = {
   text?: string;
   error?: string;
   durationMs: number;
+  estimatedCostYen?: number | null;
   captureIndex: number;
   captureCreatedAt: string;
 };
@@ -60,7 +62,7 @@ export function AnalyzeWorkbench({ tenantId }: AnalyzeWorkbenchProps) {
   const [loadingImage, setLoadingImage] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const [provider, setProvider] = useState<VisionProviderId>("claude");
+  const [provider, setProvider] = useState<VisionProviderId>("gemini");
   const [prompt, setPrompt] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
@@ -163,7 +165,11 @@ export function AnalyzeWorkbench({ tenantId }: AnalyzeWorkbenchProps) {
         }),
       });
 
-      const data = (await res.json()) as { text?: string; error?: string };
+      const data = (await res.json()) as {
+        text?: string;
+        error?: string;
+        estimatedCostYen?: number | null;
+      };
       const durationMs = performance.now() - started;
       const label = getProviderMeta(provider)?.label ?? provider;
 
@@ -174,6 +180,7 @@ export function AnalyzeWorkbench({ tenantId }: AnalyzeWorkbenchProps) {
         providerLabel: label,
         prompt: prompt.trim(),
         durationMs,
+        estimatedCostYen: res.ok ? (data.estimatedCostYen ?? null) : null,
         captureIndex: currentIndex,
         captureCreatedAt: currentCapture.created_at,
         status: res.ok ? "success" : "error",
@@ -209,7 +216,15 @@ export function AnalyzeWorkbench({ tenantId }: AnalyzeWorkbenchProps) {
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-10">
-      <h1 className="text-lg font-semibold text-ink">画像解析</h1>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-lg font-semibold text-ink">画像解析</h1>
+        <Link
+          href="/"
+          className="shrink-0 text-sm font-medium text-signal transition-colors hover:text-ink"
+        >
+          ←戻る
+        </Link>
+      </div>
       <p className="mt-1 text-sm text-ink-soft">
         保存済みの画像にAI解析を実行し、命令に応じた結果を確認します。
       </p>
@@ -348,6 +363,9 @@ export function AnalyzeWorkbench({ tenantId }: AnalyzeWorkbenchProps) {
                 <p className="text-xs text-ink-soft">
                   {entry.ranAt.toLocaleString("ja-JP")} · {entry.providerLabel} · 所要時間{" "}
                   {formatDuration(entry.durationMs)}
+                  {entry.estimatedCostYen != null
+                    ? ` · 消費概算コスト ≈ ${formatCostYen(entry.estimatedCostYen)}`
+                    : ""}
                   {entry.status === "error" ? " · エラー" : ""}
                 </p>
                 <p className="mt-1 text-xs text-ink-soft/80">

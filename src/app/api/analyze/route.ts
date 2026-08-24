@@ -53,6 +53,7 @@ export async function POST(req: Request) {
       text: result.text,
       provider: parsed.provider,
       prompt: parsed.prompt,
+      estimatedCostYen: result.estimatedCostYen ?? null,
     });
   } catch (err) {
     if (err instanceof AnalysisError) {

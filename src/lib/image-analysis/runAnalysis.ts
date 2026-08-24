@@ -1,5 +1,6 @@
 import sharp from "sharp";
 import { analyzeWithClaude } from "./claude-vision/claudeVision";
+import { estimateCostYen } from "./estimateCostYen";
 import { analyzeWithGemini } from "./gemini/gemini";
 import { analyzeWithOpenAI } from "./openai-vision/openaiVision";
 import { formatAnprResult } from "./plate-recognizer/formatAnprResult";
@@ -33,41 +34,65 @@ export async function runAnalysis(
     throw new AnalysisError("命令テキストを入力してください", 400);
   }
 
+  const usdJpy = Number(env.COST_USD_JPY) || undefined;
+
   switch (providerId) {
     case "claude": {
       const prepared = await normalizeForVision(input);
-      return analyzeWithClaude(prepared, {
+      const result = await analyzeWithClaude(prepared, {
         apiKey: requireApiKey("ANTHROPIC_API_KEY", env),
         model: env.ANTHROPIC_VISION_MODEL || "claude-sonnet-4-5",
       });
+      return withCost("claude", result, usdJpy);
     }
     case "gpt-4o": {
       const prepared = await normalizeForVision(input);
-      return analyzeWithOpenAI(prepared, {
+      const result = await analyzeWithOpenAI(prepared, {
         apiKey: requireApiKey("OPENAI_API_KEY", env),
         model: env.OPENAI_GPT4O_MODEL || "gpt-4o",
       });
+      return withCost("gpt-4o", result, usdJpy);
     }
     case "gpt-5": {
       const prepared = await normalizeForVision(input);
-      return analyzeWithOpenAI(prepared, {
+      const result = await analyzeWithOpenAI(prepared, {
         apiKey: requireApiKey("OPENAI_API_KEY", env),
         model: env.OPENAI_GPT5_MODEL || "gpt-5",
       });
+      return withCost("gpt-5", result, usdJpy);
     }
     case "gemini": {
       const prepared = await normalizeForVision(input);
-      return analyzeWithGemini(prepared, {
+      const result = await analyzeWithGemini(prepared, {
         apiKey: requireApiKey("GEMINI_API_KEY", env),
         model: env.GEMINI_VISION_MODEL || "gemini-2.5-flash",
       });
+      return withCost("gemini", result, usdJpy);
     }
     case "plate-recognizer": {
       requireApiKey("PLATE_RECOGNIZER_API_KEY", env);
       const anpr = await recognizePlate(input.imageBuffer);
-      return { text: formatAnprResult(anpr), raw: anpr.raw };
+      return withCost(
+        "plate-recognizer",
+        {
+          text: formatAnprResult(anpr),
+          raw: anpr.raw,
+        },
+        usdJpy
+      );
     }
   }
+}
+
+function withCost(
+  provider: VisionProviderId,
+  result: VisionAnalyzeResult,
+  usdJpy?: number
+): VisionAnalyzeResult {
+  return {
+    ...result,
+    estimatedCostYen: estimateCostYen(provider, result.raw, { usdJpy }),
+  };
 }
 
 function requireApiKey(name: string, env: NodeJS.ProcessEnv): string {
