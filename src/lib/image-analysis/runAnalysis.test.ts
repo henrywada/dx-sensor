@@ -1,7 +1,19 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import sharp from "sharp";
 import { AnalysisError, runAnalysis } from "./runAnalysis";
 
-const jpeg = Buffer.from("fake-image");
+async function makeJpeg(): Promise<Buffer> {
+  return sharp({
+    create: {
+      width: 32,
+      height: 24,
+      channels: 3,
+      background: { r: 10, g: 20, b: 30 },
+    },
+  })
+    .jpeg()
+    .toBuffer();
+}
 
 describe("runAnalysis", () => {
   afterEach(() => {
@@ -11,6 +23,7 @@ describe("runAnalysis", () => {
   });
 
   it("rejects a blank prompt for vision models", async () => {
+    const jpeg = await makeJpeg();
     await expect(
       runAnalysis("claude", {
         imageBuffer: jpeg,
@@ -25,6 +38,7 @@ describe("runAnalysis", () => {
 
   it("throws when the provider API key is missing", async () => {
     vi.stubEnv("ANTHROPIC_API_KEY", "");
+    const jpeg = await makeJpeg();
 
     await expect(
       runAnalysis("claude", {
@@ -57,6 +71,7 @@ describe("runAnalysis", () => {
       })
     );
 
+    const jpeg = await makeJpeg();
     const result = await runAnalysis("plate-recognizer", {
       imageBuffer: jpeg,
       mimeType: "image/jpeg",
@@ -69,6 +84,7 @@ describe("runAnalysis", () => {
   });
 
   it("wraps unknown providers as a 400 error", async () => {
+    const jpeg = await makeJpeg();
     await expect(
       runAnalysis("unknown" as never, {
         imageBuffer: jpeg,

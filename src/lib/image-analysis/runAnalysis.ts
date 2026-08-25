@@ -1,14 +1,12 @@
-import sharp from "sharp";
 import { analyzeWithClaude } from "./claude-vision/claudeVision";
 import { estimateCostYen } from "./estimateCostYen";
 import { analyzeWithGemini } from "./gemini/gemini";
 import { analyzeWithOpenAI } from "./openai-vision/openaiVision";
 import { formatAnprResult } from "./plate-recognizer/formatAnprResult";
 import { recognizePlate } from "./plate-recognizer/plateRecognizer";
+import { prepareVisionImage, resolveMaxEdgePx } from "./prepareVisionImage";
 import { getProviderMeta, isVisionProviderId } from "./providers";
 import type { VisionAnalyzeInput, VisionAnalyzeResult, VisionProviderId } from "./types";
-
-const VISION_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
 
 export class AnalysisError extends Error {
   readonly statusCode: number;
@@ -38,40 +36,47 @@ export async function runAnalysis(
 
   switch (providerId) {
     case "claude": {
-      const prepared = await normalizeForVision(input);
+      const apiKey = requireApiKey("ANTHROPIC_API_KEY", env);
+      const prepared = await prepareForVision(input, env);
       const result = await analyzeWithClaude(prepared, {
-        apiKey: requireApiKey("ANTHROPIC_API_KEY", env),
+        apiKey,
         model: env.ANTHROPIC_VISION_MODEL || "claude-sonnet-4-5",
       });
       return withCost("claude", result, usdJpy);
     }
     case "gpt-4o": {
-      const prepared = await normalizeForVision(input);
+      const apiKey = requireApiKey("OPENAI_API_KEY", env);
+      const prepared = await prepareForVision(input, env);
       const result = await analyzeWithOpenAI(prepared, {
-        apiKey: requireApiKey("OPENAI_API_KEY", env),
+        apiKey,
         model: env.OPENAI_GPT4O_MODEL || "gpt-4o",
       });
       return withCost("gpt-4o", result, usdJpy);
     }
     case "gpt-5": {
-      const prepared = await normalizeForVision(input);
+      const apiKey = requireApiKey("OPENAI_API_KEY", env);
+      const prepared = await prepareForVision(input, env);
       const result = await analyzeWithOpenAI(prepared, {
-        apiKey: requireApiKey("OPENAI_API_KEY", env),
+        apiKey,
         model: env.OPENAI_GPT5_MODEL || "gpt-5",
       });
       return withCost("gpt-5", result, usdJpy);
     }
     case "gemini": {
-      const prepared = await normalizeForVision(input);
+      const apiKey = requireApiKey("GEMINI_API_KEY", env);
+      const prepared = await prepareForVision(input, env);
       const result = await analyzeWithGemini(prepared, {
-        apiKey: requireApiKey("GEMINI_API_KEY", env),
+        apiKey,
         model: env.GEMINI_VISION_MODEL || "gemini-2.5-flash",
       });
       return withCost("gemini", result, usdJpy);
     }
     case "plate-recognizer": {
       requireApiKey("PLATE_RECOGNIZER_API_KEY", env);
-      const anpr = await recognizePlate(input.imageBuffer);
+      const prepared = await prepareVisionImage(input, {
+        maxEdgePx: resolveMaxEdgePx("anpr", env),
+      });
+      const anpr = await recognizePlate(prepared.imageBuffer);
       return withCost(
         "plate-recognizer",
         {
@@ -82,6 +87,15 @@ export async function runAnalysis(
       );
     }
   }
+}
+
+async function prepareForVision(
+  input: VisionAnalyzeInput,
+  env: NodeJS.ProcessEnv
+): Promise<VisionAnalyzeInput> {
+  return prepareVisionImage(input, {
+    maxEdgePx: resolveMaxEdgePx("vision", env),
+  });
 }
 
 function withCost(
@@ -101,10 +115,4 @@ function requireApiKey(name: string, env: NodeJS.ProcessEnv): string {
     throw new AnalysisError(`${name} のAPIキーが未設定です`, 503);
   }
   return value;
-}
-
-async function normalizeForVision(input: VisionAnalyzeInput): Promise<VisionAnalyzeInput> {
-  if (VISION_MIME_TYPES.has(input.mimeType)) return input;
-  const imageBuffer = await sharp(input.imageBuffer).jpeg({ quality: 90 }).toBuffer();
-  return { ...input, imageBuffer, mimeType: "image/jpeg" };
 }
