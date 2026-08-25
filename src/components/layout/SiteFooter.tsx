@@ -16,7 +16,7 @@ export function SiteFooter({ fullWidth = false }: { fullWidth?: boolean }) {
         </div>
         <div className="flex items-center gap-3 text-xs text-ink-soft">
           <span>© 2026 dx-sensor. All rights reserved.</span>
-          <span className="font-en text-ink-soft/70">v0.1.6</span>
+          <span className="font-en text-ink-soft/70">v0.1.7</span>
         </div>
       </div>
     </footer>
