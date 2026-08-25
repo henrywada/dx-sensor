@@ -9,6 +9,7 @@ import {
   Settings,
   KeyRound,
   ChevronRight,
+  Upload,
 } from "lucide-react";
 import { AppCard, type AppCardProps } from "@/components/ui/AppCard";
 
@@ -41,6 +42,13 @@ const groups: AdminGroup[] = [
             title: "Supabase接続確認",
             description: "DBへの接続とtenantsテーブルのデータを確認します。",
             href: "/debug",
+          },
+          {
+            icon: Upload,
+            eyebrow: "手動取得",
+            title: "手動撮影アップロード",
+            description: "スマホのカメラで撮影した写真をその場でアップロードします。",
+            href: "/admin/capture",
           },
           {
             icon: Building2,
@@ -129,6 +137,13 @@ const groups: AdminGroup[] = [
             title: "Supabase接続確認",
             description: "DBへの接続とtenantsテーブルのデータを確認します。",
             href: "/debug",
+          },
+          {
+            icon: Upload,
+            eyebrow: "手動取得",
+            title: "手動撮影アップロード",
+            description: "スマホのカメラで撮影した写真をその場でアップロードします。",
+            href: "/admin/capture",
           },
           {
             icon: Database,

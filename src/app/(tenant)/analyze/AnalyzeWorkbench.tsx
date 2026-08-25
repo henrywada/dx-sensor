@@ -287,7 +287,7 @@ export function AnalyzeWorkbench({ tenantId }: AnalyzeWorkbenchProps) {
         {!loadingCaptures && captures.length === 0 && (
           <p className="text-sm text-ink-soft">
             画像がありません。{" "}
-            <Link href="/capture" className="font-medium text-signal underline-offset-2 hover:underline">
+            <Link href="/admin/capture" className="font-medium text-signal underline-offset-2 hover:underline">
               手動撮影アップロード
             </Link>
             から追加してください。

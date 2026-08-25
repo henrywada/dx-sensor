@@ -1,4 +1,4 @@
-import { Aperture, Camera, ImagePlus, ScanLine, LineChart, Settings2, Sparkles, Upload } from "lucide-react";
+import { Aperture, Camera, ImagePlus, ScanLine, LineChart, Settings2, Sparkles } from "lucide-react";
 import { AppCard, type AppCardProps } from "@/components/ui/AppCard";
 
 interface Category {
@@ -17,21 +17,15 @@ const categories: Category[] = [
     label: "データを取り込む",
     apps: [
       {
-        icon: Upload,
-        title: "手動撮影アップロード",
-        description: "スマホのカメラで撮影した写真をその場でアップロードします。",
-        href: "/capture",
-      },
-      {
         icon: ImagePlus,
-        title: "画像送信",
-        description: "件名と本文を付けて写真を撮影し、送信します。",
+        title: "スマホ画像の保存",
+        description: "件名と本文を付けて写真を撮影し、保存します。",
         href: "/send_picture",
       },
       {
         icon: Aperture,
-        title: "アプリ内撮影",
-        description: "カメラ映像を表示し、指定間隔で自動的に取得＆保存します。",
+        title: "スマホのカメラで定点監視",
+        description: "スマホのカメラ映像をAIで解析し、変化を監視します。",
         href: "/capture_auto",
       },
     ],

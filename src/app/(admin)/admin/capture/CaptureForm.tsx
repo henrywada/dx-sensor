@@ -61,7 +61,7 @@ export function CaptureForm({ tenantId, userId }: CaptureFormProps) {
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-lg font-semibold text-ink">写真を撮影</h1>
         <Link
-          href="/"
+          href="/admin"
           className="shrink-0 text-sm font-medium text-signal transition-colors hover:text-ink"
         >
           ←戻る

@@ -5,7 +5,7 @@ soracam / balenaCloud に次ぐ第3の取得経路。テナント担当者がス
 
 ## 現状(最小実装)
 
-- コードの実体はここではなく `src/app/(tenant)/capture/` に置かれている
+- コードの実体はここではなく `src/app/(admin)/admin/capture/` に置かれている
   (ページから直接 Supabase クライアント経由で Storage / テーブルへ書き込むため、
   balenaCloud のようなクラウド側ドライバー実装は不要)
 - テーブル: `manual_captures`（マイグレーション `0006_manual_captures.sql`）
