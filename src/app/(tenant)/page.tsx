@@ -1,4 +1,4 @@
-import { Camera, ScanLine, LineChart, Settings2, Sparkles, Upload } from "lucide-react";
+import { Aperture, Camera, ScanLine, LineChart, Settings2, Sparkles, Upload } from "lucide-react";
 import { AppCard, type AppCardProps } from "@/components/ui/AppCard";
 
 interface Category {
@@ -21,6 +21,12 @@ const categories: Category[] = [
         title: "手動撮影アップロード",
         description: "スマホのカメラで撮影した写真をその場でアップロードします。",
         href: "/capture",
+      },
+      {
+        icon: Aperture,
+        title: "アプリ内撮影",
+        description: "カメラ映像を表示し、指定間隔で自動的に取得＆保存します。",
+        href: "/capture_auto",
       },
     ],
   },
