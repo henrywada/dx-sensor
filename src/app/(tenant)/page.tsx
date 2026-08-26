@@ -1,4 +1,4 @@
-import { Aperture, Camera, ImagePlus, ScanLine, LineChart, Settings2, Sparkles } from "lucide-react";
+import { Aperture, ImagePlus } from "lucide-react";
 import { AppCard, type AppCardProps } from "@/components/ui/AppCard";
 
 interface Category {
@@ -14,14 +14,8 @@ interface Category {
  */
 const categories: Category[] = [
   {
-    label: "データを取り込む",
+    label: "スマホ監視カメラ",
     apps: [
-      {
-        icon: ImagePlus,
-        title: "スマホ画像の保存",
-        description: "件名と本文を付けて写真を撮影し、保存します。",
-        href: "/send_picture",
-      },
       {
         icon: Aperture,
         title: "スマホのカメラで定点監視",
@@ -31,47 +25,13 @@ const categories: Category[] = [
     ],
   },
   {
-    label: "カメラ画像で分析",
+    label: "写真保存",
     apps: [
       {
-        icon: Sparkles,
-        title: "画像解析",
-        description: "保存済みの画像にAI解析を実行し、命令に応じた結果を確認します。",
-        href: "/analyze",
-      },
-      {
-        icon: Camera,
-        title: "駐車場モニタリング",
-        description: "定点カメラの画像から、駐車枠ごとの空き状況を自動で確認します。",
-        badge: "準備中",
-      },
-      {
-        icon: ScanLine,
-        title: "ナンバープレート認識ログ",
-        description: "検知した車両のナンバー・車種・色の履歴を一覧で確認します。",
-        badge: "準備中",
-      },
-    ],
-  },
-  {
-    label: "データを見る",
-    apps: [
-      {
-        icon: LineChart,
-        title: "観測履歴",
-        description: "時系列で記録された観測データの推移をグラフで確認します。",
-        badge: "準備中",
-      },
-    ],
-  },
-  {
-    label: "設定",
-    apps: [
-      {
-        icon: Settings2,
-        title: "カメラ設置状況",
-        description: "登録済みカメラの稼働状況や最終通信時刻を確認します。",
-        badge: "準備中",
+        icon: ImagePlus,
+        title: "スマホ写真にコメントを付けて保存",
+        description: "件名と本文を付けて写真を撮影し、保存します。",
+        href: "/send_picture",
       },
     ],
   },

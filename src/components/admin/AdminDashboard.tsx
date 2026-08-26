@@ -10,8 +10,11 @@ import {
   KeyRound,
   ChevronRight,
   Upload,
+  Sparkles,
 } from "lucide-react";
 import { AppCard, type AppCardProps } from "@/components/ui/AppCard";
+import type { DashboardStats } from "@/lib/admin/getDashboardStats";
+import { DashboardStatsView } from "./DashboardStats";
 
 interface AdminCategory {
   key: string;
@@ -34,37 +37,8 @@ const groups: AdminGroup[] = [
         key: "dashboard",
         label: "ダッシュボード",
         icon: LayoutDashboard,
-        description: "各機能への入り口です。",
-        apps: [
-          {
-            icon: Database,
-            eyebrow: "接続状態",
-            title: "Supabase接続確認",
-            description: "DBへの接続とtenantsテーブルのデータを確認します。",
-            href: "/debug",
-          },
-          {
-            icon: Upload,
-            eyebrow: "手動取得",
-            title: "手動撮影アップロード",
-            description: "スマホのカメラで撮影した写真をその場でアップロードします。",
-            href: "/admin/capture",
-          },
-          {
-            icon: Building2,
-            eyebrow: "契約先の一覧",
-            title: "テナント管理",
-            description: "登録済みテナントとメンバーの一覧を確認します。",
-            badge: "準備中",
-          },
-          {
-            icon: Camera,
-            eyebrow: "観測機器",
-            title: "カメラ/センサー管理",
-            description: "登録済みカメラの一覧と稼働状況を確認します。",
-            badge: "準備中",
-          },
-        ],
+        description: "ユーザーとサービスの利用状況を確認します。",
+        apps: [],
       },
     ],
   },
@@ -146,6 +120,13 @@ const groups: AdminGroup[] = [
             href: "/admin/capture",
           },
           {
+            icon: Sparkles,
+            eyebrow: "AI解析",
+            title: "画像解析",
+            description: "保存済みの画像にAI解析を実行し、命令に応じた結果を確認します。",
+            href: "/admin/analyze",
+          },
+          {
             icon: Database,
             eyebrow: "観測記録",
             title: "観測イベント一覧",
@@ -180,9 +161,15 @@ const groups: AdminGroup[] = [
 
 const allCategories = groups.flatMap((g) => g.categories);
 
-export function AdminDashboard() {
+type AdminDashboardProps = {
+  stats: DashboardStats;
+  statsError?: string | null;
+};
+
+export function AdminDashboard({ stats, statsError = null }: AdminDashboardProps) {
   const [selectedKey, setSelectedKey] = useState(allCategories[0].key);
   const selected = allCategories.find((c) => c.key === selectedKey) ?? allCategories[0];
+  const isDashboard = selected.key === "dashboard";
 
   return (
     <div className="flex w-full flex-1">
@@ -197,6 +184,7 @@ export function AdminDashboard() {
                 return (
                   <li key={category.key}>
                     <button
+                      type="button"
                       onClick={() => setSelectedKey(category.key)}
                       className={`flex w-full items-center gap-2 rounded-md border-l-2 px-2.5 py-1.5 text-left text-sm transition-colors ${
                         active
@@ -221,11 +209,21 @@ export function AdminDashboard() {
           <h1 className="text-xl font-bold text-ink">{selected.label}</h1>
           <p className="mt-0.5 text-sm text-ink-soft">{selected.description}</p>
 
-          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {selected.apps.map((app) => (
-              <AppCard key={app.title} {...app} />
-            ))}
-          </div>
+          {isDashboard ? (
+            statsError ? (
+              <p className="mt-6 rounded-md bg-alert/10 px-3 py-2 text-sm text-alert">
+                ダッシュボードの読み込みに失敗しました: {statsError}
+              </p>
+            ) : (
+              <DashboardStatsView stats={stats} />
+            )
+          ) : (
+            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {selected.apps.map((app) => (
+                <AppCard key={app.title} {...app} />
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
