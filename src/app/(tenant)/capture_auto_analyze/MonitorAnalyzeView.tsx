@@ -715,55 +715,52 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
             </div>
           )}
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <ImagePanel title="前回画像" imageNo={prevImageNo} url={prevImageUrl} />
-            <ImagePanel title="今回画像" imageNo={currImageNo} url={currImageUrl} />
-          </div>
-
-          <div className="rounded-lg border border-line bg-white p-5">
-            <div className="flex justify-end">
-              <div className="text-right">
-                <p className="text-xs font-medium text-ink-soft">ステータス</p>
-                <p className="mt-0.5 text-sm font-medium text-ink">
-                  {severityLabel(lastSeverity)}
-                  {lastDiffScore !== null ? (
-                    <span className="font-normal text-ink-soft">
-                      {" "}
-                      · 差分 {lastDiffScore.toFixed(4)}
+          <div className="rounded-lg border border-line bg-white px-4 py-3">
+            <div className="flex items-start gap-4 sm:gap-5">
+              <LampGroup severity={lastSeverity} />
+              <div className="min-w-0 flex-1">
+                <ul className="space-y-1 text-left text-xs leading-snug text-ink-soft">
+                  <li className="flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500" />
+                    <span>緑：変化なし（差分が小さく、AI解析をスキップ）</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-yellow-400" />
+                    <span>黄：軽微な変化（記録するが通知はしない）</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-600" />
+                    <span>赤：通知対象（大きな変化。メール設定時は通知キューへ）</span>
+                  </li>
+                </ul>
+                <div className="mt-2 flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
+                  <p className="min-w-0 flex-1 text-left text-sm leading-snug text-ink">{lastMessage}</p>
+                  <p className="shrink-0 text-right text-xs leading-snug">
+                    <span className="font-medium text-ink-soft">ステータス</span>
+                    <span className="ml-2 font-medium text-ink">
+                      {severityLabel(lastSeverity)}
+                      {lastDiffScore !== null ? (
+                        <span className="font-normal text-ink-soft">
+                          {" "}
+                          · 差分 {lastDiffScore.toFixed(4)}
+                        </span>
+                      ) : null}
                     </span>
-                  ) : null}
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-4 flex justify-center">
-              <div className="grid grid-cols-[auto_auto] items-center gap-6">
-                <LampGroup severity={lastSeverity} />
-                <div className="min-w-0">
-                  <ul className="space-y-1.5 text-left text-xs leading-snug text-ink-soft">
-                    <li className="flex items-center gap-2">
-                      <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500" />
-                      <span>緑：変化なし（差分が小さく、AI解析をスキップ）</span>
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-yellow-400" />
-                      <span>黄：軽微な変化（記録するが通知はしない）</span>
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-600" />
-                      <span>赤：通知対象（大きな変化。メール設定時は通知キューへ）</span>
-                    </li>
-                  </ul>
-                  <p className="mt-3 text-left text-sm leading-relaxed text-ink">{lastMessage}</p>
+                  </p>
                 </div>
               </div>
             </div>
 
             {tickError && (
-              <p className="mt-3 rounded-md bg-alert/10 px-3 py-2 text-sm text-alert">
+              <p className="mt-2 rounded-md bg-alert/10 px-3 py-2 text-sm text-alert">
                 {tickError}
               </p>
             )}
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <ImagePanel title="前回画像" imageNo={prevImageNo} url={prevImageUrl} />
+            <ImagePanel title="今回画像" imageNo={currImageNo} url={currImageUrl} />
           </div>
 
         </section>
