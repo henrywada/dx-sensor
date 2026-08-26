@@ -16,7 +16,6 @@ import { recognizePlate } from "@/lib/image-analysis/plate-recognizer/plateRecog
  *
  * Expected JSON body:
  * {
- *   "parkingSpotId": "uuid",       // which spot this frame corresponds to
  *   "imageBase64": "...",          // JPEG, base64-encoded
  *   "capturedAt": "2026-08-22T10:00:00Z",
  *   "diffScore": 0.42              // the agent's own frame-diff score (method 2), for logging
@@ -44,32 +43,17 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { parkingSpotId, imageBase64, capturedAt, diffScore } = body;
+  const { imageBase64, capturedAt, diffScore } = body;
 
-  if (!parkingSpotId || !imageBase64) {
+  if (!imageBase64) {
     return NextResponse.json({ error: "missing fields" }, { status: 400 });
   }
 
-  // Ownership check: the spot must belong to the same tenant as the key.
-  // (And, if the key is camera-scoped, to that camera specifically.)
-  const { data: spot, error: spotError } = await supabase
-    .from("parking_spots")
-    .select("id, tenant_id, camera_id")
-    .eq("id", parkingSpotId)
-    .eq("tenant_id", agentKey.tenant_id)
-    .maybeSingle();
-
-  if (spotError || !spot) {
-    return NextResponse.json({ error: "invalid parking_spot for this key" }, { status: 403 });
-  }
-  if (agentKey.camera_id && spot.camera_id !== agentKey.camera_id) {
-    return NextResponse.json({ error: "spot does not belong to this key's camera" }, { status: 403 });
-  }
-
   const imageBuffer = Buffer.from(imageBase64, "base64");
+  const cameraSegment = agentKey.camera_id ?? "nocamera";
 
   // Store the raw image
-  const storagePath = `vehicle-events/${agentKey.tenant_id}/${spot.id}/${Date.now()}.jpg`;
+  const storagePath = `vehicle-events/${agentKey.tenant_id}/${cameraSegment}/${Date.now()}.jpg`;
   const { error: uploadError } = await supabase.storage
     .from("observations") // create this bucket in Supabase Storage beforehand
     .upload(storagePath, imageBuffer, { contentType: "image/jpeg" });
@@ -84,8 +68,7 @@ export async function POST(req: NextRequest) {
 
   const { error: insertError } = await supabase.from("vehicle_events").insert({
     tenant_id: agentKey.tenant_id,
-    camera_id: agentKey.camera_id ?? spot.camera_id,
-    parking_spot_id: spot.id,
+    camera_id: agentKey.camera_id,
     captured_at: capturedAt ?? new Date().toISOString(),
     image_path: storagePath,
     occupied: Boolean(anpr?.plateNumber),

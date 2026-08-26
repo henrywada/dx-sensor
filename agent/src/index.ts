@@ -21,7 +21,6 @@ const CAMERA_HOST = requireEnv("CAMERA_HOST");
 const CAMERA_PORT = Number(process.env.CAMERA_PORT ?? "2020");
 const CAMERA_USER = requireEnv("CAMERA_USER");
 const CAMERA_PASS = requireEnv("CAMERA_PASS");
-const PARKING_SPOT_ID = requireEnv("PARKING_SPOT_ID");
 const INGEST_URL = requireEnv("INGEST_URL"); // e.g. https://dx-sensor.example.com/api/ingest/vehicle-event
 const AGENT_API_KEY = requireEnv("AGENT_API_KEY"); // dxs_agent_...
 const POLL_INTERVAL_MS = Number(process.env.POLL_INTERVAL_MS ?? "60000"); // default: 1 min
@@ -87,7 +86,6 @@ async function pushToIngestApi(imageBuffer: Buffer, diffScore: number) {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${AGENT_API_KEY}` },
     body: JSON.stringify({
-      parkingSpotId: PARKING_SPOT_ID,
       imageBase64: imageBuffer.toString("base64"),
       capturedAt: new Date().toISOString(),
       diffScore,

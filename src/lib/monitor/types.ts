@@ -5,6 +5,8 @@ export type MonitorSlot = { label: string; default_value: string };
 export type SystemMonitorTemplate = {
   id: string;
   title: string;
+  /** 一覧に出すシーン概要（1〜2文） */
+  summary: string;
   slots: MonitorSlot[]; // length 10
 };
 

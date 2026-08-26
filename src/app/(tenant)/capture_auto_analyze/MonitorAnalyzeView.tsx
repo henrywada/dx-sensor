@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Bell, FileText, ImageIcon, ListChecks, Play, Settings, Square, Wand2 } from "lucide-react";
+import { Bell, CircleHelp, FileText, ImageIcon, ListChecks, Play, Settings, Square, Wand2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
@@ -109,6 +109,7 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
   const [settingsLoading, setSettingsLoading] = useState(true);
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
+  const [meaningModalOpen, setMeaningModalOpen] = useState(false);
   const [promptModalOpen, setPromptModalOpen] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
   const [settingsError, setSettingsError] = useState<string | null>(null);
@@ -445,10 +446,20 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
         <section className="mt-5 rounded-lg border border-line bg-white p-5">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h2 className="flex items-center gap-2 text-base font-semibold text-ink">
-                <Settings className="h-4 w-4 text-signal" strokeWidth={1.75} />
-                監視条件の設定
-              </h2>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="flex items-center gap-2 text-base font-semibold text-ink">
+                  <Settings className="h-4 w-4 text-signal" strokeWidth={1.75} />
+                  監視条件の設定
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setMeaningModalOpen(true)}
+                  className="inline-flex items-center gap-1 rounded-md border border-line bg-white px-2.5 py-1 text-xs font-medium text-ink-soft transition hover:border-signal/50 hover:text-ink"
+                >
+                  <CircleHelp className="h-3.5 w-3.5" strokeWidth={1.75} />
+                  監視条件を設定する意味
+                </button>
+              </div>
               <p className="mt-1 text-sm text-ink-soft">
                 システムテンプレートを使うか、白紙から項目名・値を自分で設定できます。
               </p>
@@ -663,14 +674,44 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
           </div>
 
           <div className="rounded-lg border border-line bg-white p-5">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <LampGroup severity={lastSeverity} />
-              <div className="text-sm text-ink-soft">
-                <span className="font-medium text-ink">{severityLabel(lastSeverity)}</span>
-                {lastDiffScore !== null ? ` · 差分 ${lastDiffScore.toFixed(4)}` : ""}
+            <div className="flex justify-end">
+              <div className="text-right">
+                <p className="text-xs font-medium text-ink-soft">ステータス</p>
+                <p className="mt-0.5 text-sm font-medium text-ink">
+                  {severityLabel(lastSeverity)}
+                  {lastDiffScore !== null ? (
+                    <span className="font-normal text-ink-soft">
+                      {" "}
+                      · 差分 {lastDiffScore.toFixed(4)}
+                    </span>
+                  ) : null}
+                </p>
               </div>
             </div>
-            <p className="mt-3 text-sm leading-relaxed text-ink">{lastMessage}</p>
+
+            <div className="mt-4 flex justify-center">
+              <div className="grid grid-cols-[auto_auto] items-center gap-6">
+                <LampGroup severity={lastSeverity} />
+                <div className="min-w-0">
+                  <ul className="space-y-1.5 text-left text-xs leading-snug text-ink-soft">
+                    <li className="flex items-center gap-2">
+                      <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500" />
+                      <span>緑：変化なし（差分が小さく、AI解析をスキップ）</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-yellow-400" />
+                      <span>黄：軽微な変化（記録するが通知はしない）</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-alert" />
+                      <span>赤：通知対象（大きな変化。メール設定時は通知キューへ）</span>
+                    </li>
+                  </ul>
+                  <p className="mt-3 text-left text-sm leading-relaxed text-ink">{lastMessage}</p>
+                </div>
+              </div>
+            </div>
+
             {tickError && (
               <p className="mt-3 rounded-md bg-alert/10 px-3 py-2 text-sm text-alert">
                 {tickError}
@@ -798,17 +839,17 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
 
       {templateModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-ink/50 p-4 sm:items-center"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby="template-modal-title"
           onClick={() => setTemplateModalOpen(false)}
         >
           <div
-            className="w-full max-w-lg rounded-lg border border-line bg-white p-4 shadow-lg"
+            className="flex max-h-[min(85vh,720px)] w-full max-w-3xl flex-col rounded-lg border border-line bg-white shadow-lg"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-start justify-between gap-3">
+            <div className="flex shrink-0 items-start justify-between gap-3 border-b border-line px-5 py-3">
               <h2 id="template-modal-title" className="text-base font-semibold text-ink">
                 システムテンプレート
               </h2>
@@ -820,26 +861,71 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
                 閉じる
               </button>
             </div>
-            <div className="mt-4 space-y-3">
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-1">
               {templates.map((template) => (
                 <button
                   key={template.id}
                   type="button"
                   onClick={() => applyTemplate(template)}
-                  className="w-full rounded-md border border-line bg-white p-3 text-left transition hover:border-signal/50"
+                  className="w-full border-b border-line/70 py-2 text-left last:border-b-0 hover:bg-paper/80"
                 >
-                  <p className="font-medium text-ink">{template.title}</p>
-                  <p className="mt-1 text-xs text-ink-soft">
-                    {template.slots
-                      .slice(0, 3)
-                      .map((slot) => slot.label)
-                      .join(" / ")}
-                  </p>
+                  <p className="text-sm font-medium text-ink">{template.title}</p>
+                  <p className="mt-0.5 text-xs leading-snug text-ink-soft">{template.summary}</p>
                 </button>
               ))}
               {templates.length === 0 && (
-                <p className="text-sm text-ink-soft">テンプレートがありません。</p>
+                <p className="py-3 text-sm text-ink-soft">テンプレートがありません。</p>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {meaningModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="meaning-modal-title"
+          onClick={() => setMeaningModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-lg rounded-lg border border-line bg-white shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-3">
+              <h2 id="meaning-modal-title" className="text-base font-semibold text-ink">
+                監視条件を設定する意味
+              </h2>
+              <button
+                type="button"
+                onClick={() => setMeaningModalOpen(false)}
+                className="text-sm text-ink-soft hover:text-ink"
+              >
+                閉じる
+              </button>
+            </div>
+            <div className="space-y-4 px-5 py-4 text-sm leading-relaxed text-ink">
+              <p>
+                AIが画像を解析するとき、判定の精度を高めるための事前情報を渡す設定です。
+              </p>
+              <p>次の順で情報を与えると、効果が期待できます。</p>
+              <ol className="list-decimal space-y-2 pl-5 text-ink">
+                <li>
+                  <span className="font-medium">監視ポイント</span>
+                  <span className="text-ink-soft">（何を判定するか）</span>
+                </li>
+                <li>
+                  <span className="font-medium">除外／無視してよいもの</span>
+                </li>
+                <li>
+                  <span className="font-medium">画像全体の一文説明</span>
+                </li>
+                <li>
+                  <span className="font-medium">通知したい変化の言い方</span>
+                  <span className="text-ink-soft">（要約の質を高めるため）</span>
+                </li>
+              </ol>
             </div>
           </div>
         </div>
@@ -945,23 +1031,31 @@ function LampGroup({ severity }: { severity: MonitorSeverity | null }) {
   const activeSeverity = severity ?? "skip";
   return (
     <div className="flex items-center gap-3" aria-label="監視ランプ">
-      <Lamp label="緑" color="bg-emerald-500" active={activeSeverity === "skip"} />
-      <Lamp label="黄" color="bg-yellow-400" active={activeSeverity === "minor"} />
-      <Lamp label="赤" color="bg-alert" active={activeSeverity === "notify"} />
+      <Lamp color="bg-emerald-500" active={activeSeverity === "skip"} label="緑" />
+      <Lamp color="bg-yellow-400" active={activeSeverity === "minor"} label="黄" />
+      <Lamp color="bg-alert" active={activeSeverity === "notify"} label="赤" />
     </div>
   );
 }
 
-function Lamp({ label, color, active }: { label: string; color: string; active: boolean }) {
+function Lamp({
+  color,
+  active,
+  label,
+}: {
+  color: string;
+  active: boolean;
+  label: string;
+}) {
   return (
-    <div className="flex items-center gap-1.5 text-xs text-ink-soft">
-      <span
-        className={`h-4 w-4 rounded-full ${color} ${
-          active ? "opacity-100 shadow-[0_0_0_4px_rgba(37,99,235,0.12)]" : "opacity-20"
-        }`}
-      />
-      {label}
-    </div>
+    <span
+      role="img"
+      aria-label={label}
+      title={label}
+      className={`inline-block h-16 w-16 rounded-full ${color} ${
+        active ? "opacity-100 ring-4 ring-signal/15" : "opacity-25"
+      }`}
+    />
   );
 }
 

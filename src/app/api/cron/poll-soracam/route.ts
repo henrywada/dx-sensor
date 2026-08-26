@@ -93,8 +93,6 @@ export async function GET(req: NextRequest) {
       const { error: insertError } = await supabase.from("vehicle_events").insert({
         tenant_id: camera.tenant_id,
         camera_id: camera.id,
-        // parking_spot_id: TODO — same open item as the ONVIF cron route; map camera -> spot
-        parking_spot_id: null,
         captured_at: frame.capturedAt.toISOString(),
         image_path: archivePath,
         occupied: Boolean(anpr?.plateNumber),
