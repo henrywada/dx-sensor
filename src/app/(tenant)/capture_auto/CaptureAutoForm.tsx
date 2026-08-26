@@ -255,7 +255,18 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4 p-6">
       <div className="flex items-center justify-between gap-3">
-        <h1 className="text-lg font-semibold text-ink">アプリ内撮影</h1>
+        <div className="flex min-w-0 items-center gap-2">
+          <h1 className="text-lg font-semibold text-ink">アプリ内撮影</h1>
+          {autoRunning && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-signal/10 px-2.5 py-0.5 text-xs font-medium text-signal">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-signal opacity-70" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-signal" />
+              </span>
+              稼働中
+            </span>
+          )}
+        </div>
         <Link
           href="/"
           className="shrink-0 text-sm font-medium text-signal transition-colors hover:text-ink"
@@ -285,6 +296,22 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
               cameraState === "ready" ? "opacity-100" : "opacity-0"
             }`}
           />
+          {autoRunning && cameraState === "ready" && (
+            <div className="pointer-events-none absolute left-3 top-3 flex items-center gap-2 rounded-full bg-black/55 px-2.5 py-1 text-xs font-medium text-white backdrop-blur-sm">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
+                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />
+              </span>
+              稼働中 · {intervalSec}秒間隔
+            </div>
+          )}
+          {autoRunning && uploadStatus === "uploading" && (
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-3 pb-3 pt-8">
+              <div className="h-1 overflow-hidden rounded-full bg-white/25">
+                <div className="h-full w-1/2 animate-pulse rounded-full bg-signal" />
+              </div>
+            </div>
+          )}
           {cameraState !== "ready" && (
             <div className="absolute inset-0 flex items-center justify-center px-4 text-center">
               <p className="text-sm text-white/90">
@@ -343,17 +370,33 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
         </button>
       </div>
 
-      <p className="text-xs text-ink-soft">
-        {autoRunning
-          ? `取得＆保存中（${intervalSec}秒間隔）`
-          : "表示のみ（未開始）"}
-        {" · "}
-        保存枚数: {savedCount}
-        {lastSavedAt
-          ? ` · 最終保存 ${lastSavedAt.toLocaleTimeString("ja-JP")}`
-          : ""}
-        {uploadStatus === "uploading" ? " · 保存中..." : ""}
-      </p>
+      <div
+        className={`rounded-md px-3 py-2 text-xs ${
+          autoRunning
+            ? "border border-signal/25 bg-signal/5 text-ink"
+            : "text-ink-soft"
+        }`}
+      >
+        {autoRunning ? (
+          <p className="flex flex-wrap items-center gap-2">
+            <span className="relative flex h-2 w-2 shrink-0">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-signal opacity-70" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-signal" />
+            </span>
+            <span className="font-medium text-signal">稼働中</span>
+            <span className="text-ink-soft">（{intervalSec}秒間隔で取得＆保存）</span>
+          </p>
+        ) : (
+          <p>表示のみ（未開始）</p>
+        )}
+        <p className="mt-1 text-ink-soft">
+          保存枚数: {savedCount}
+          {lastSavedAt
+            ? ` · 最終保存 ${lastSavedAt.toLocaleTimeString("ja-JP")}`
+            : ""}
+          {uploadStatus === "uploading" ? " · 保存中..." : ""}
+        </p>
+      </div>
 
       {uploadStatus === "error" && (
         <p className="rounded-md bg-alert/10 px-3 py-2 text-sm text-alert">

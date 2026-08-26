@@ -17,6 +17,7 @@ function createDeps(overrides: Partial<RunMonitorTickDeps> = {}): RunMonitorTick
   return {
     getNextUnprocessedCapture: vi.fn(async () => null),
     getCaptureById: vi.fn(async () => null),
+    getCaptureOrdinal: vi.fn(async () => 1),
     markCaptureProcessed: vi.fn(async () => undefined),
     downloadCapture: vi.fn(async () => ({
       buffer: Buffer.from("image"),

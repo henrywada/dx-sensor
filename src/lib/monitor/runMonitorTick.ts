@@ -19,6 +19,8 @@ export type MonitorTickResponse = {
   diffScore: number | null;
   prevCaptureId: string | null;
   currCaptureId: string | null;
+  prevCaptureNo: number | null;
+  currCaptureNo: number | null;
   prevSignedUrl: string | null;
   currSignedUrl: string | null;
   summary: string | null;
@@ -70,8 +72,9 @@ export type InsertMonitorChangeEventInput = {
 };
 
 export type RunMonitorTickDeps = {
-  getNextUnprocessedCapture: () => Promise<MonitorCapture | null>;
+  getNextUnprocessedCapture: (excludeId: string | null) => Promise<MonitorCapture | null>;
   getCaptureById: (id: string) => Promise<MonitorCapture | null>;
+  getCaptureOrdinal: (id: string) => Promise<number | null>;
   markCaptureProcessed: (id: string) => Promise<void>;
   downloadCapture: (storagePath: string) => Promise<DownloadedCapture>;
   createSignedUrl: (storagePath: string) => Promise<string | null>;
@@ -85,7 +88,7 @@ export async function runMonitorTick(
   request: MonitorTickRequest,
   deps: RunMonitorTickDeps
 ): Promise<MonitorTickResponse> {
-  const currCapture = await deps.getNextUnprocessedCapture();
+  const currCapture = await deps.getNextUnprocessedCapture(request.prevCaptureId);
   if (!currCapture) {
     return {
       status: "waiting",
@@ -93,6 +96,10 @@ export async function runMonitorTick(
       diffScore: null,
       prevCaptureId: request.prevCaptureId,
       currCaptureId: null,
+      prevCaptureNo: request.prevCaptureId
+        ? await deps.getCaptureOrdinal(request.prevCaptureId)
+        : null,
+      currCaptureNo: null,
       prevSignedUrl: null,
       currSignedUrl: null,
       summary: null,
@@ -102,6 +109,7 @@ export async function runMonitorTick(
   }
 
   const currSignedUrl = await deps.createSignedUrl(currCapture.storagePath);
+  const currCaptureNo = await deps.getCaptureOrdinal(currCapture.id);
 
   if (!request.prevCaptureId) {
     await deps.markCaptureProcessed(currCapture.id);
@@ -111,6 +119,8 @@ export async function runMonitorTick(
       diffScore: null,
       prevCaptureId: null,
       currCaptureId: currCapture.id,
+      prevCaptureNo: null,
+      currCaptureNo,
       prevSignedUrl: null,
       currSignedUrl,
       summary: null,
@@ -124,10 +134,11 @@ export async function runMonitorTick(
     throw new MonitorTickError("前回画像が見つかりません", 404);
   }
 
-  const [prevFile, currFile, prevSignedUrl] = await Promise.all([
+  const [prevFile, currFile, prevSignedUrl, prevCaptureNo] = await Promise.all([
     deps.downloadCapture(prevCapture.storagePath),
     deps.downloadCapture(currCapture.storagePath),
     deps.createSignedUrl(prevCapture.storagePath),
+    deps.getCaptureOrdinal(prevCapture.id),
   ]);
 
   const diffScore = await (deps.diffScore ?? frameDiffScore)(
@@ -144,6 +155,8 @@ export async function runMonitorTick(
       diffScore,
       prevCaptureId: prevCapture.id,
       currCaptureId: currCapture.id,
+      prevCaptureNo,
+      currCaptureNo,
       prevSignedUrl,
       currSignedUrl,
       summary: null,
@@ -188,6 +201,8 @@ export async function runMonitorTick(
     diffScore,
     prevCaptureId: prevCapture.id,
     currCaptureId: currCapture.id,
+    prevCaptureNo,
+    currCaptureNo,
     prevSignedUrl,
     currSignedUrl,
     summary: analysis.text,

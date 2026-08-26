@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Bell, CircleHelp, FileText, ImageIcon, ListChecks, Play, Settings, Square, Wand2 } from "lucide-react";
+import { Bell, CircleHelp, FileText, History, ImageIcon, ListChecks, Play, Settings, Square, Wand2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
@@ -13,12 +13,12 @@ import type {
 } from "@/lib/monitor/types";
 
 const SLOT_COUNT = 10;
-const TICK_INTERVAL_MS = 10_000;
+const TICK_INTERVAL_MS = 5_000;
 const IMAGE_PAGE_SIZE = 80;
 const ALL_IMAGES = "all";
 const SESSION_IMAGES = "session";
 
-type TabId = "settings" | "status" | "images";
+type TabId = "settings" | "status" | "history" | "images";
 type ImageFilter = typeof ALL_IMAGES | typeof SESSION_IMAGES;
 
 type MonitorAnalyzeViewProps = {
@@ -91,7 +91,7 @@ function severityLabel(severity: MonitorSeverity | null): string {
 }
 
 function severityColor(severity: MonitorSeverity): string {
-  if (severity === "notify") return "bg-alert";
+  if (severity === "notify") return "bg-red-600";
   if (severity === "minor") return "bg-yellow-400";
   return "bg-emerald-500";
 }
@@ -118,7 +118,10 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
   const [monitoringStartedAt, setMonitoringStartedAt] = useState<string | null>(null);
   const [lastSeverity, setLastSeverity] = useState<MonitorSeverity | null>(null);
   const [lastDiffScore, setLastDiffScore] = useState<number | null>(null);
-  const [lastMessage, setLastMessage] = useState("監視を開始すると10秒ごとに解析します。");
+  const [lastMessage, setLastMessage] = useState("監視を開始すると5秒ごとに解析します。");
+  const [monitorCount, setMonitorCount] = useState(0);
+  const [prevImageNo, setPrevImageNo] = useState<number | null>(null);
+  const [currImageNo, setCurrImageNo] = useState<number | null>(null);
   const [prevImageUrl, setPrevImageUrl] = useState<string | null>(null);
   const [currImageUrl, setCurrImageUrl] = useState<string | null>(null);
   const [events, setEvents] = useState<MonitorEvent[]>([]);
@@ -278,7 +281,10 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
     if (activeTab === "images") {
       void loadImages();
     }
-  }, [activeTab, loadImages]);
+    if (activeTab === "history") {
+      void loadEvents();
+    }
+  }, [activeTab, loadEvents, loadImages]);
 
   const runTick = useCallback(async () => {
     if (tickInFlightRef.current) return;
@@ -303,21 +309,22 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
       if (!res.ok) throw new Error(body?.error ?? "監視処理に失敗しました");
 
       const result = body as MonitorTickResponse;
+      setMonitorCount((count) => count + 1);
       setLastSeverity(result.status === "waiting" ? null : (result.severity ?? "skip"));
       setLastDiffScore(result.diffScore);
       setLastMessage(result.summary || result.message || "監視処理が完了しました");
       setPrevImageUrl(result.prevSignedUrl);
       setCurrImageUrl(result.currSignedUrl);
+      setPrevImageNo(result.prevCaptureNo ?? null);
+      setCurrImageNo(result.currCaptureNo ?? null);
 
       if (result.currCaptureId) {
         lastCurrCaptureIdRef.current = result.currCaptureId;
       }
-      if (result.eventId) {
+      if (result.eventId || result.status === "processed" || result.status === "baseline") {
         void loadEvents();
       }
-      if (activeTabRef.current === "images") {
-        void loadImages();
-      }
+      void loadImages();
     } catch (err) {
       setTickError(err instanceof Error ? err.message : "監視処理に失敗しました");
     } finally {
@@ -403,6 +410,9 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
     setTickError(null);
     setPrevImageUrl(null);
     setCurrImageUrl(null);
+    setPrevImageNo(null);
+    setCurrImageNo(null);
+    setMonitorCount(0);
     lastCurrCaptureIdRef.current = null;
   }
 
@@ -427,15 +437,18 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
       </div>
 
       <p className="mt-2 text-sm leading-relaxed text-ink-soft">
-        アプリ内撮影で蓄積した画像を、画面を開いている間だけ10秒ごとに比較し、変化をAIで解析します。
+        アプリ内撮影で蓄積した画像を、画面を開いている間だけ5秒ごとに比較し、変化をAIで解析します。
       </p>
 
-      <div className="mt-6 grid grid-cols-3 gap-2 rounded-lg border border-line bg-white p-1">
+      <div className="mt-6 grid grid-cols-2 gap-2 rounded-lg border border-line bg-white p-1 sm:grid-cols-4">
         <TabButton active={activeTab === "settings"} onClick={() => setActiveTab("settings")}>
           監視条件の設定
         </TabButton>
         <TabButton active={activeTab === "status"} onClick={() => setActiveTab("status")}>
           監視状況
+        </TabButton>
+        <TabButton active={activeTab === "history"} onClick={() => setActiveTab("history")}>
+          アクティブ履歴
         </TabButton>
         <TabButton active={activeTab === "images"} onClick={() => setActiveTab("images")}>
           画像表示
@@ -615,9 +628,13 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
                   )}
                 </h2>
                 <p className="mt-1 text-sm text-ink-soft">
-                  {monitoring ? "監視中（10秒間隔）" : "停止中"}
+                  {monitoring ? "監視中（5秒間隔）" : "停止中"}
                   {tickRunning ? " · 処理中..." : ""}
                   {monitoringStartedAt ? ` · 開始 ${formatTimestamp(monitoringStartedAt)}` : ""}
+                </p>
+                <p className="mt-1 text-sm text-ink">
+                  監視カウント: <span className="font-en font-medium">{monitorCount}</span>
+                  <span className="text-ink-soft">（監視処理の実行回数）</span>
                 </p>
               </div>
             </div>
@@ -669,8 +686,8 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
           )}
 
           <div className="grid gap-4 md:grid-cols-2">
-            <ImagePanel title="前回画像" url={prevImageUrl} />
-            <ImagePanel title="今回画像" url={currImageUrl} />
+            <ImagePanel title="前回画像" imageNo={prevImageNo} url={prevImageUrl} />
+            <ImagePanel title="今回画像" imageNo={currImageNo} url={currImageUrl} />
           </div>
 
           <div className="rounded-lg border border-line bg-white p-5">
@@ -703,7 +720,7 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
                       <span>黄：軽微な変化（記録するが通知はしない）</span>
                     </li>
                     <li className="flex items-center gap-2">
-                      <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-alert" />
+                      <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-600" />
                       <span>赤：通知対象（大きな変化。メール設定時は通知キューへ）</span>
                     </li>
                   </ul>
@@ -719,47 +736,59 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
             )}
           </div>
 
-          <div className="rounded-lg border border-line bg-white p-5">
-            <div className="flex items-center justify-between gap-3">
-              <h3 className="text-sm font-semibold text-ink">直近イベント</h3>
-              <button
-                type="button"
-                onClick={() => void loadEvents()}
-                className="text-sm font-medium text-signal transition hover:text-ink"
-              >
-                更新
-              </button>
+        </section>
+      )}
+
+      {activeTab === "history" && (
+        <section className="mt-5 rounded-lg border border-line bg-white p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="flex items-center gap-2 text-base font-semibold text-ink">
+                <History className="h-4 w-4 text-signal" strokeWidth={1.75} />
+                イベント履歴
+              </h2>
+              <p className="mt-1 text-sm text-ink-soft">
+                監視で検出した変化イベントをすべて表示します。
+                {events.length > 0 ? `（${events.length}件）` : ""}
+              </p>
             </div>
-            {eventsLoading && <p className="mt-4 text-sm text-ink-soft">読み込み中...</p>}
-            {!eventsLoading && events.length === 0 && (
-              <p className="mt-4 text-sm text-ink-soft">まだイベントはありません。</p>
-            )}
-            {!eventsLoading && events.length > 0 && (
-              <ul className="mt-4 divide-y divide-line">
-                {events.map((event) => (
-                  <li key={event.id} className="py-3">
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-ink-soft">
-                      <span>{formatTimestamp(event.created_at)}</span>
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-white ${severityColor(
-                          event.severity
-                        )}`}
-                      >
-                        {severityLabel(event.severity)}
-                      </span>
-                      {event.diff_score !== null && (
-                        <span>差分 {Number(event.diff_score).toFixed(4)}</span>
-                      )}
-                      {event.email_queued && <span>通知キューあり</span>}
-                    </div>
-                    <p className="mt-1 line-clamp-2 text-sm text-ink">
-                      {event.ai_summary ?? "AI要約はありません。"}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            )}
+            <button
+              type="button"
+              onClick={() => void loadEvents()}
+              className="rounded-md border border-line bg-white px-3 py-2 text-sm font-medium text-ink transition hover:border-signal/50"
+            >
+              更新
+            </button>
           </div>
+          {eventsLoading && <p className="mt-6 text-sm text-ink-soft">読み込み中...</p>}
+          {!eventsLoading && events.length === 0 && (
+            <p className="mt-6 text-sm text-ink-soft">まだイベントはありません。</p>
+          )}
+          {!eventsLoading && events.length > 0 && (
+            <ul className="mt-5 divide-y divide-line">
+              {events.map((event) => (
+                <li key={event.id} className="py-3">
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-ink-soft">
+                    <span>{formatTimestamp(event.created_at)}</span>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-white ${severityColor(
+                        event.severity
+                      )}`}
+                    >
+                      {severityLabel(event.severity)}
+                    </span>
+                    {event.diff_score !== null && (
+                      <span>差分 {Number(event.diff_score).toFixed(4)}</span>
+                    )}
+                    {event.email_queued && <span>通知キューあり</span>}
+                  </div>
+                  <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-ink">
+                    {event.ai_summary ?? "AI要約はありません。"}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       )}
 
@@ -812,13 +841,13 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
             <ul className="mt-5 grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
               {images.map((image) => (
                 <li key={image.id} className="overflow-hidden rounded-md border border-line bg-white">
-                  <div className="aspect-square bg-line">
+                  <div className="aspect-[3/4] bg-line">
                     {image.signedUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={image.signedUrl}
                         alt=""
-                        className="h-full w-full object-cover"
+                        className="h-full w-full object-contain"
                       />
                     ) : (
                       <div className="flex h-full items-center justify-center text-[10px] text-ink-soft">
@@ -1028,42 +1057,73 @@ function FilterButton({
 }
 
 function LampGroup({ severity }: { severity: MonitorSeverity | null }) {
-  const activeSeverity = severity ?? "skip";
   return (
-    <div className="flex items-center gap-3" aria-label="監視ランプ">
-      <Lamp color="bg-emerald-500" active={activeSeverity === "skip"} label="緑" />
-      <Lamp color="bg-yellow-400" active={activeSeverity === "minor"} label="黄" />
-      <Lamp color="bg-alert" active={activeSeverity === "notify"} label="赤" />
+    <div className="flex items-center gap-4" aria-label="監視ランプ">
+      <Lamp
+        color="bg-emerald-500"
+        glow="shadow-[0_0_22px_rgba(16,185,129,0.85)] ring-emerald-300"
+        active={severity === "skip"}
+        label="緑"
+      />
+      <Lamp
+        color="bg-yellow-400"
+        glow="shadow-[0_0_22px_rgba(250,204,21,0.9)] ring-yellow-200"
+        active={severity === "minor"}
+        label="黄"
+      />
+      <Lamp
+        color="bg-red-600"
+        glow="shadow-[0_0_22px_rgba(220,38,38,0.9)] ring-red-300"
+        active={severity === "notify"}
+        label="赤"
+      />
     </div>
   );
 }
 
 function Lamp({
   color,
+  glow,
   active,
   label,
 }: {
   color: string;
+  glow: string;
   active: boolean;
   label: string;
 }) {
   return (
     <span
       role="img"
-      aria-label={label}
-      title={label}
+      aria-label={`${label}${active ? "（点灯中）" : ""}`}
+      title={active ? `${label}（点灯中）` : label}
       className={`inline-block h-16 w-16 rounded-full ${color} ${
-        active ? "opacity-100 ring-4 ring-signal/15" : "opacity-25"
+        active
+          ? `opacity-100 ring-4 ${glow} animate-pulse`
+          : "opacity-20 grayscale"
       }`}
     />
   );
 }
 
-function ImagePanel({ title, url }: { title: string; url: string | null }) {
+function ImagePanel({
+  title,
+  imageNo,
+  url,
+}: {
+  title: string;
+  imageNo: number | null;
+  url: string | null;
+}) {
   return (
     <div className="overflow-hidden rounded-lg border border-line bg-white">
-      <div className="border-b border-line px-3 py-2 text-sm font-medium text-ink">{title}</div>
-      <div className="aspect-4/3 bg-line">
+      <div className="border-b border-line px-3 py-2 text-sm font-medium text-ink">
+        {title}
+        {imageNo != null ? (
+          <span className="ml-2 font-en text-ink-soft">#{imageNo}</span>
+        ) : null}
+      </div>
+      <div className="aspect-[3/4] max-h-[70vh] bg-line">
         {url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={url} alt={title} className="h-full w-full object-contain" />

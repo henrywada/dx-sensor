@@ -65,16 +65,21 @@ export async function POST(req: Request) {
 
   const supabase = createServerSupabase();
   const deps: RunMonitorTickDeps = {
-    async getNextUnprocessedCapture() {
-      const { data, error } = await supabase
+    async getNextUnprocessedCapture(excludeId) {
+      let query = supabase
         .from("auto_captures")
         .select("id, storage_path")
         .eq("tenant_id", tenant.tenantId)
         .eq("captured_by", viewer.userId)
         .is("processed_at", null)
         .order("created_at", { ascending: true })
-        .limit(1)
-        .maybeSingle();
+        .limit(1);
+
+      if (excludeId) {
+        query = query.neq("id", excludeId);
+      }
+
+      const { data, error } = await query.maybeSingle();
 
       if (error) throw new MonitorTickError(error.message, 500);
       return data ? toMonitorCapture(data) : null;
@@ -93,15 +98,46 @@ export async function POST(req: Request) {
       return data ? toMonitorCapture(data) : null;
     },
 
+    async getCaptureOrdinal(id: string) {
+      const { data: row, error: rowError } = await supabase
+        .from("auto_captures")
+        .select("created_at")
+        .eq("id", id)
+        .eq("tenant_id", tenant.tenantId)
+        .eq("captured_by", viewer.userId)
+        .maybeSingle();
+
+      if (rowError) throw new MonitorTickError(rowError.message, 500);
+      if (!row) return null;
+
+      const { count, error: countError } = await supabase
+        .from("auto_captures")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", tenant.tenantId)
+        .eq("captured_by", viewer.userId)
+        .lte("created_at", row.created_at);
+
+      if (countError) throw new MonitorTickError(countError.message, 500);
+      return count ?? null;
+    },
+
     async markCaptureProcessed(id: string) {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("auto_captures")
         .update({ processed_at: new Date().toISOString() })
         .eq("id", id)
         .eq("tenant_id", tenant.tenantId)
-        .eq("captured_by", viewer.userId);
+        .eq("captured_by", viewer.userId)
+        .select("id")
+        .maybeSingle();
 
       if (error) throw new MonitorTickError(error.message, 500);
+      if (!data) {
+        throw new MonitorTickError(
+          "画像を処理済みに更新できませんでした（権限またはマイグレーション未適用の可能性）",
+          500
+        );
+      }
     },
 
     async downloadCapture(storagePath: string): Promise<DownloadedCapture> {
