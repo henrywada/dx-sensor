@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { buildMonitorPrompt } from "@/lib/monitor/buildMonitorPrompt";
+import type { MonitorTickResponse } from "@/lib/monitor/runMonitorTick";
 import type {
   MonitorSeverity,
   MonitorUserSettings,
@@ -33,19 +34,6 @@ type MonitorEvent = {
   ai_summary: string | null;
   email_queued: boolean;
   created_at: string;
-};
-
-type MonitorTickResponse = {
-  status: "waiting" | "baseline" | "processed";
-  severity: MonitorSeverity | null;
-  diffScore: number | null;
-  prevCaptureId: string | null;
-  currCaptureId: string | null;
-  prevSignedUrl: string | null;
-  currSignedUrl: string | null;
-  summary: string | null;
-  eventId: string | null;
-  message?: string;
 };
 
 type AutoCaptureRow = {
