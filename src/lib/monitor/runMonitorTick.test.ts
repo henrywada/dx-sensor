@@ -75,7 +75,7 @@ describe("runMonitorTick", () => {
     expect(deps.insertChangeEvent).not.toHaveBeenCalled();
   });
 
-  it("marks processed and skips event creation for tiny diffs", async () => {
+  it("marks processed and logs skip for tiny diffs", async () => {
     const deps = createDeps({
       getNextUnprocessedCapture: vi.fn(async () => ({
         id: "curr-capture",
@@ -86,6 +86,7 @@ describe("runMonitorTick", () => {
         storagePath: "tenant/day/prev.jpg",
       })),
       diffScore: vi.fn(async () => 0.01),
+      insertChangeEvent: vi.fn(async () => "skip-event-id"),
     });
 
     const result = await runMonitorTick(REQUEST, deps);
@@ -98,11 +99,17 @@ describe("runMonitorTick", () => {
       currCaptureId: "curr-capture",
       prevSignedUrl: "signed:tenant/day/prev.jpg",
       currSignedUrl: "signed:tenant/day/curr.jpg",
-      eventId: null,
+      eventId: "skip-event-id",
     });
     expect(deps.markCaptureProcessed).toHaveBeenCalledWith("curr-capture");
     expect(deps.analyzeImages).not.toHaveBeenCalled();
-    expect(deps.insertChangeEvent).not.toHaveBeenCalled();
+    expect(deps.insertChangeEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        severity: "skip",
+        diffScore: 0.01,
+        emailQueued: false,
+      })
+    );
     expect(deps.logAnalysisRun).not.toHaveBeenCalled();
   });
 

@@ -66,7 +66,7 @@ export type InsertMonitorChangeEventInput = {
   prevCaptureId: string;
   currCaptureId: string;
   diffScore: number;
-  severity: Exclude<MonitorSeverity, "skip">;
+  severity: MonitorSeverity;
   summary: string;
   emailQueued: boolean;
 };
@@ -148,6 +148,14 @@ export async function runMonitorTick(
   const severity = classifyDiffScore(diffScore);
 
   if (severity === "skip") {
+    const eventId = await deps.insertChangeEvent({
+      prevCaptureId: prevCapture.id,
+      currCaptureId: currCapture.id,
+      diffScore,
+      severity,
+      summary: "変化が小さいため通知対象外です（処理は実行済み）",
+      emailQueued: false,
+    });
     await deps.markCaptureProcessed(currCapture.id);
     return {
       status: "processed",
@@ -160,7 +168,7 @@ export async function runMonitorTick(
       prevSignedUrl,
       currSignedUrl,
       summary: null,
-      eventId: null,
+      eventId,
       message: "変化が小さいため通知対象外です",
     };
   }

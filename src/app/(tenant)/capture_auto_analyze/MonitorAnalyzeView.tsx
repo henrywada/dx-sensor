@@ -21,6 +21,8 @@ const SESSION_IMAGES = "session";
 const PROCESSED_ALL = "all";
 const PROCESSED_UNPROCESSED = "unprocessed";
 const PROCESSED_DONE = "processed";
+const HISTORY_ALL = "all";
+const HISTORY_EVENTS_ONLY = "events";
 
 type TabId = "settings" | "status" | "history" | "images";
 type ImageFilter = typeof ALL_IMAGES | typeof SESSION_IMAGES;
@@ -28,6 +30,7 @@ type ProcessedFilter =
   | typeof PROCESSED_ALL
   | typeof PROCESSED_UNPROCESSED
   | typeof PROCESSED_DONE;
+type HistoryFilter = typeof HISTORY_ALL | typeof HISTORY_EVENTS_ONLY;
 
 type MonitorAnalyzeViewProps = {
   tenantId: string;
@@ -36,11 +39,13 @@ type MonitorAnalyzeViewProps = {
 
 type MonitorEvent = {
   id: string;
-  severity: Exclude<MonitorSeverity, "skip">;
+  severity: MonitorSeverity;
   diff_score: number | null;
   ai_summary: string | null;
   email_queued: boolean;
   created_at: string;
+  prev_capture_no?: number | null;
+  curr_capture_no?: number | null;
 };
 
 type AutoCaptureRow = {
@@ -94,6 +99,10 @@ function severityColor(severity: MonitorSeverity): string {
   return "bg-emerald-500";
 }
 
+function isChangeEvent(severity: MonitorSeverity): boolean {
+  return severity === "minor" || severity === "notify";
+}
+
 export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps) {
   const supabase = useMemo(() => createClient(), []);
 
@@ -129,6 +138,7 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
 
   const [imageFilter, setImageFilter] = useState<ImageFilter>(ALL_IMAGES);
   const [processedFilter, setProcessedFilter] = useState<ProcessedFilter>(PROCESSED_ALL);
+  const [historyFilter, setHistoryFilter] = useState<HistoryFilter>(HISTORY_EVENTS_ONLY);
   const [images, setImages] = useState<CaptureImage[]>([]);
   const [imagesLoading, setImagesLoading] = useState(false);
   const [imagesError, setImagesError] = useState<string | null>(null);
@@ -451,6 +461,11 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
     setLastMessage("監視を停止しました。");
   }
 
+  const displayedEvents = useMemo(() => {
+    if (historyFilter === HISTORY_ALL) return events;
+    return events.filter((event) => isChangeEvent(event.severity));
+  }, [events, historyFilter]);
+
   return (
     <div className="mx-auto max-w-5xl px-6 py-8 pb-16">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -768,15 +783,40 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
 
       {activeTab === "history" && (
         <section className="mt-5 rounded-lg border border-line bg-white p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="flex items-center gap-2 text-base font-semibold text-ink">
-                <History className="h-4 w-4 text-signal" strokeWidth={1.75} />
-                イベント履歴
-              </h2>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <h2 className="flex items-center gap-2 text-base font-semibold text-ink">
+                  <History className="h-4 w-4 text-signal" strokeWidth={1.75} />
+                  イベント履歴
+                </h2>
+                <fieldset className="flex flex-wrap items-center gap-3 text-sm text-ink">
+                  <legend className="sr-only">履歴の表示範囲</legend>
+                  {(
+                    [
+                      [HISTORY_ALL, "すべて"],
+                      [HISTORY_EVENTS_ONLY, "イベントのみ"],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <label key={value} className="inline-flex cursor-pointer items-center gap-1.5">
+                      <input
+                        type="radio"
+                        name="history-filter"
+                        value={value}
+                        checked={historyFilter === value}
+                        onChange={() => setHistoryFilter(value)}
+                        className="accent-signal"
+                      />
+                      <span>{label}</span>
+                    </label>
+                  ))}
+                </fieldset>
+              </div>
               <p className="mt-1 text-sm text-ink-soft">
-                監視で検出した変化イベントをすべて表示します。
-                {events.length > 0 ? `（${events.length}件）` : ""}
+                {historyFilter === HISTORY_ALL
+                  ? "変化イベントに加え、処理は実行したがイベントにしなかったログも表示します。"
+                  : "監視で検出した変化イベントのみを表示します。"}
+                {displayedEvents.length > 0 ? `（${displayedEvents.length}件）` : ""}
               </p>
             </div>
             <button
@@ -788,12 +828,16 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
             </button>
           </div>
           {eventsLoading && <p className="mt-6 text-sm text-ink-soft">読み込み中...</p>}
-          {!eventsLoading && events.length === 0 && (
-            <p className="mt-6 text-sm text-ink-soft">まだイベントはありません。</p>
+          {!eventsLoading && displayedEvents.length === 0 && (
+            <p className="mt-6 text-sm text-ink-soft">
+              {historyFilter === HISTORY_ALL
+                ? "まだ処理ログはありません。"
+                : "まだイベントはありません。"}
+            </p>
           )}
-          {!eventsLoading && events.length > 0 && (
+          {!eventsLoading && displayedEvents.length > 0 && (
             <ul className="mt-5 divide-y divide-line">
-              {events.map((event) => (
+              {displayedEvents.map((event) => (
                 <li key={event.id} className="py-3">
                   <div className="flex flex-wrap items-center gap-2 text-xs text-ink-soft">
                     <span>{formatTimestamp(event.created_at)}</span>
@@ -806,6 +850,11 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
                     </span>
                     {event.diff_score !== null && (
                       <span>差分 {Number(event.diff_score).toFixed(4)}</span>
+                    )}
+                    {event.prev_capture_no != null && event.curr_capture_no != null && (
+                      <span className="font-en">
+                        #{event.prev_capture_no}→#{event.curr_capture_no}
+                      </span>
                     )}
                     {event.email_queued && <span>通知キューあり</span>}
                   </div>

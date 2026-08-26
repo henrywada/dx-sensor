@@ -21,5 +21,30 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json(data ?? []);
+  const events = data ?? [];
+  if (events.length === 0) {
+    return NextResponse.json([]);
+  }
+
+  const { data: orderedIds, error: orderError } = await supabase
+    .from("auto_captures")
+    .select("id")
+    .eq("captured_by", viewer.userId)
+    .order("created_at", { ascending: true });
+
+  if (orderError) {
+    return NextResponse.json({ error: orderError.message }, { status: 500 });
+  }
+
+  const ordinalById = new Map<string, number>(
+    (orderedIds ?? []).map((row, index) => [row.id as string, index + 1])
+  );
+
+  return NextResponse.json(
+    events.map((event) => ({
+      ...event,
+      prev_capture_no: ordinalById.get(event.prev_capture_id) ?? null,
+      curr_capture_no: ordinalById.get(event.curr_capture_id) ?? null,
+    }))
+  );
 }
