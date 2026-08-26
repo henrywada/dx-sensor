@@ -108,7 +108,7 @@ export function DashboardStatsView({ stats }: DashboardStatsProps) {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div className="rounded-md border border-line bg-white p-4">
             <h3 className="text-sm font-semibold text-ink">スマホ監視カメラ</h3>
-            <p className="mt-0.5 text-xs text-ink-soft">manual_captures 日別件数</p>
+            <p className="mt-0.5 text-xs text-ink-soft">auto_captures 日別件数</p>
             <div className="mt-3">
               <CurvedLineChart data={stats.monitorCamera} stroke="#0e7c86" />
             </div>

@@ -138,7 +138,7 @@ export async function getDashboardStats(
   const [users, capturesRes, sendsRes, analysisRes] = await Promise.all([
     listAllUsers(supabase),
     supabase
-      .from("manual_captures")
+      .from("auto_captures")
       .select("created_at")
       .gte("created_at", rangeStart),
     supabase

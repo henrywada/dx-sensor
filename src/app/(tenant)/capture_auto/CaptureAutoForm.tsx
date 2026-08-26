@@ -137,12 +137,12 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
       const path = `${tenantId}/${dateSegment}/${crypto.randomUUID()}.jpg`;
 
       const { error: uploadErrorResult } = await supabase.storage
-        .from("manual-captures")
+        .from("auto-captures")
         .upload(path, blob, { contentType: "image/jpeg" });
 
       if (uploadErrorResult) throw uploadErrorResult;
 
-      const { error: insertError } = await supabase.from("manual_captures").insert({
+      const { error: insertError } = await supabase.from("auto_captures").insert({
         tenant_id: tenantId,
         captured_by: userId,
         storage_path: path,
