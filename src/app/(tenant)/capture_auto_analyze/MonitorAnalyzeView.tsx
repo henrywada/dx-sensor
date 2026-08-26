@@ -18,9 +18,16 @@ const TICK_INTERVAL_MS = 5_000;
 const IMAGE_PAGE_SIZE = 80;
 const ALL_IMAGES = "all";
 const SESSION_IMAGES = "session";
+const PROCESSED_ALL = "all";
+const PROCESSED_UNPROCESSED = "unprocessed";
+const PROCESSED_DONE = "processed";
 
 type TabId = "settings" | "status" | "history" | "images";
 type ImageFilter = typeof ALL_IMAGES | typeof SESSION_IMAGES;
+type ProcessedFilter =
+  | typeof PROCESSED_ALL
+  | typeof PROCESSED_UNPROCESSED
+  | typeof PROCESSED_DONE;
 
 type MonitorAnalyzeViewProps = {
   tenantId: string;
@@ -45,6 +52,7 @@ type AutoCaptureRow = {
 
 type CaptureImage = AutoCaptureRow & {
   signedUrl: string | null;
+  imageNo: number | null;
 };
 
 const emptySlots = () => Array.from({ length: SLOT_COUNT }, () => "");
@@ -68,6 +76,8 @@ function formatTimestamp(iso: string): string {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
   });
 }
 
@@ -118,6 +128,7 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
   const [tickError, setTickError] = useState<string | null>(null);
 
   const [imageFilter, setImageFilter] = useState<ImageFilter>(ALL_IMAGES);
+  const [processedFilter, setProcessedFilter] = useState<ProcessedFilter>(PROCESSED_ALL);
   const [images, setImages] = useState<CaptureImage[]>([]);
   const [imagesLoading, setImagesLoading] = useState(false);
   const [imagesError, setImagesError] = useState<string | null>(null);
@@ -152,13 +163,20 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
   }, []);
 
   const attachSignedUrls = useCallback(
-    async (rows: AutoCaptureRow[]): Promise<CaptureImage[]> => {
+    async (
+      rows: AutoCaptureRow[],
+      ordinalById: Map<string, number>
+    ): Promise<CaptureImage[]> => {
       return Promise.all(
         rows.map(async (row) => {
           const { data } = await supabase.storage
             .from("auto-captures")
             .createSignedUrl(row.storage_path, 3600);
-          return { ...row, signedUrl: data?.signedUrl ?? null };
+          return {
+            ...row,
+            signedUrl: data?.signedUrl ?? null,
+            imageNo: ordinalById.get(row.id) ?? null,
+          };
         })
       );
     },
@@ -183,7 +201,13 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
         setImagesLoading(false);
         return;
       }
-      query = query.not("processed_at", "is", null).gte("processed_at", monitoringStartedAt);
+      query = query.gte("created_at", monitoringStartedAt);
+    }
+
+    if (processedFilter === PROCESSED_UNPROCESSED) {
+      query = query.is("processed_at", null);
+    } else if (processedFilter === PROCESSED_DONE) {
+      query = query.not("processed_at", "is", null);
     }
 
     const { data, error } = await query;
@@ -194,10 +218,28 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
       return;
     }
 
-    const withUrls = await attachSignedUrls((data ?? []) as AutoCaptureRow[]);
+    const rows = (data ?? []) as AutoCaptureRow[];
+    const { data: orderedIds, error: orderError } = await supabase
+      .from("auto_captures")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .eq("captured_by", userId)
+      .order("created_at", { ascending: true });
+
+    if (orderError) {
+      setImagesError(orderError.message);
+      setImages([]);
+      setImagesLoading(false);
+      return;
+    }
+
+    const ordinalById = new Map<string, number>(
+      (orderedIds ?? []).map((row, index) => [row.id as string, index + 1])
+    );
+    const withUrls = await attachSignedUrls(rows, ordinalById);
     setImages(withUrls);
     setImagesLoading(false);
-  }, [attachSignedUrls, imageFilter, monitoringStartedAt, supabase, tenantId, userId]);
+  }, [attachSignedUrls, imageFilter, monitoringStartedAt, processedFilter, supabase, tenantId, userId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -782,12 +824,36 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
 
       {activeTab === "images" && (
         <section className="mt-5 rounded-lg border border-line bg-white p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="flex items-center gap-2 text-base font-semibold text-ink">
-                <ImageIcon className="h-4 w-4 text-signal" strokeWidth={1.75} />
-                画像表示
-              </h2>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <h2 className="flex items-center gap-2 text-base font-semibold text-ink">
+                  <ImageIcon className="h-4 w-4 text-signal" strokeWidth={1.75} />
+                  画像表示
+                </h2>
+                <fieldset className="flex flex-wrap items-center gap-3 text-sm text-ink">
+                  <legend className="sr-only">処理状態で絞り込み</legend>
+                  {(
+                    [
+                      [PROCESSED_ALL, "すべて"],
+                      [PROCESSED_UNPROCESSED, "未処理のみ"],
+                      [PROCESSED_DONE, "処理済のみ"],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <label key={value} className="inline-flex cursor-pointer items-center gap-1.5">
+                      <input
+                        type="radio"
+                        name="processed-filter"
+                        value={value}
+                        checked={processedFilter === value}
+                        onChange={() => setProcessedFilter(value)}
+                        className="accent-signal"
+                      />
+                      <span>{label}</span>
+                    </label>
+                  ))}
+                </fieldset>
+              </div>
               <p className="mt-1 text-sm text-ink-soft">
                 自動撮影で保存された画像を表示します。
               </p>
@@ -845,7 +911,13 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
                   </div>
                   <div className="p-1.5 text-[10px] text-ink-soft">
                     <p>{formatTimestamp(image.created_at)}</p>
-                    <p>{image.processed_at ? "処理済み" : "未処理"}</p>
+                    <p>
+                      {image.imageNo != null ? (
+                        <span className="font-en">#{image.imageNo}</span>
+                      ) : null}
+                      {image.imageNo != null ? " " : ""}
+                      {image.processed_at ? "処理済み" : "未処理"}
+                    </p>
                   </div>
                 </li>
               ))}
