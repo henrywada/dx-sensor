@@ -330,12 +330,20 @@ export function SendPictureForm({ userId, userEmail }: SendPictureFormProps) {
     <div className="mx-auto flex max-w-md flex-col gap-5 p-6 pb-12">
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-lg font-semibold text-ink">画像送信</h1>
-        <Link
-          href="/"
-          className="shrink-0 text-sm font-medium text-signal transition-colors hover:text-ink"
-        >
-          ←戻る
-        </Link>
+        <div className="flex shrink-0 items-center gap-3 text-sm">
+          <Link
+            href="/send_picture_album"
+            className="font-medium text-signal transition-colors hover:text-ink"
+          >
+            アルバムを見る
+          </Link>
+          <Link
+            href="/"
+            className="font-medium text-signal transition-colors hover:text-ink"
+          >
+            ←戻る
+          </Link>
+        </div>
       </div>
 
       <div className="space-y-4">

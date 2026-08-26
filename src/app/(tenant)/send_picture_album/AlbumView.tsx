@@ -1,0 +1,425 @@
+"use client";
+
+import Link from "next/link";
+import { Images } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+
+const PAGE_SIZE = 100;
+const ALL_SUBJECTS = "";
+
+type PictureSendRow = {
+  id: string;
+  subject_text: string;
+  body_text: string;
+  storage_path: string;
+  created_at: string;
+};
+
+type AlbumItem = PictureSendRow & {
+  thumbnailUrl: string | null;
+};
+
+type AlbumViewProps = {
+  userId: string;
+};
+
+function formatTimestamp(iso: string): string {
+  return new Date(iso).toLocaleString("ja-JP", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+export function AlbumView({ userId }: AlbumViewProps) {
+  const supabase = createClient();
+
+  const [items, setItems] = useState<AlbumItem[]>([]);
+  const [subjectFilter, setSubjectFilter] = useState(ALL_SUBJECTS);
+  const [subjectOptions, setSubjectOptions] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [bodyDraft, setBodyDraft] = useState("");
+  const [savingBody, setSavingBody] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [detailMessage, setDetailMessage] = useState<string | null>(null);
+
+  const selected = useMemo(
+    () => items.find((item) => item.id === selectedId) ?? null,
+    [items, selectedId]
+  );
+
+  const attachSignedUrls = useCallback(
+    async (rows: PictureSendRow[]): Promise<AlbumItem[]> => {
+      return Promise.all(
+        rows.map(async (row) => {
+          const { data: signed } = await supabase.storage
+            .from("picture-sends")
+            .createSignedUrl(row.storage_path, 3600);
+          return {
+            ...row,
+            thumbnailUrl: signed?.signedUrl ?? null,
+          };
+        })
+      );
+    },
+    [supabase]
+  );
+
+  const loadSubjectOptions = useCallback(async () => {
+    const { data, error: qError } = await supabase
+      .from("picture_sends")
+      .select("subject_text")
+      .eq("user_id", userId)
+      .order("subject_text");
+
+    if (qError) {
+      console.error("load subject options failed", qError);
+      return;
+    }
+
+    const unique = [
+      ...new Set((data ?? []).map((r) => r.subject_text as string).filter(Boolean)),
+    ].sort((a, b) => a.localeCompare(b, "ja"));
+    setSubjectOptions(unique);
+  }, [supabase, userId]);
+
+  const loadPage = useCallback(
+    async (offset: number, append: boolean) => {
+      if (append) setLoadingMore(true);
+      else {
+        setLoading(true);
+        setError(null);
+      }
+
+      let query = supabase
+        .from("picture_sends")
+        .select("id, subject_text, body_text, storage_path, created_at")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .range(offset, offset + PAGE_SIZE - 1);
+
+      if (subjectFilter !== ALL_SUBJECTS) {
+        query = query.eq("subject_text", subjectFilter);
+      }
+
+      const { data, error: qError } = await query;
+
+      if (qError) {
+        console.error("load album failed", qError);
+        setError(qError.message);
+        if (!append) setItems([]);
+        setHasMore(false);
+        setLoading(false);
+        setLoadingMore(false);
+        return;
+      }
+
+      const rows = (data ?? []) as PictureSendRow[];
+      const withUrls = await attachSignedUrls(rows);
+
+      setItems((prev) => (append ? [...prev, ...withUrls] : withUrls));
+      setHasMore(rows.length === PAGE_SIZE);
+      setLoading(false);
+      setLoadingMore(false);
+    },
+    [attachSignedUrls, subjectFilter, supabase, userId]
+  );
+
+  useEffect(() => {
+    void loadSubjectOptions();
+  }, [loadSubjectOptions]);
+
+  useEffect(() => {
+    void loadPage(0, false);
+  }, [loadPage]);
+
+  useEffect(() => {
+    if (selected) {
+      setBodyDraft(selected.body_text);
+      setDetailError(null);
+      setDetailMessage(null);
+    }
+  }, [selected]);
+
+  function openDetail(item: AlbumItem) {
+    setSelectedId(item.id);
+    setBodyDraft(item.body_text);
+    setDetailError(null);
+    setDetailMessage(null);
+  }
+
+  function closeDetail() {
+    setSelectedId(null);
+    setDetailError(null);
+    setDetailMessage(null);
+  }
+
+  async function handleSaveBody() {
+    if (!selected) return;
+    setSavingBody(true);
+    setDetailError(null);
+    setDetailMessage(null);
+
+    const { error: updateError } = await supabase
+      .from("picture_sends")
+      .update({ body_text: bodyDraft })
+      .eq("id", selected.id)
+      .eq("user_id", userId);
+
+    setSavingBody(false);
+
+    if (updateError) {
+      setDetailError(updateError.message);
+      return;
+    }
+
+    setItems((prev) =>
+      prev.map((item) =>
+        item.id === selected.id ? { ...item, body_text: bodyDraft } : item
+      )
+    );
+    setDetailMessage("本文を保存しました。");
+  }
+
+  async function handleDelete() {
+    if (!selected) return;
+    const ok = window.confirm("この写真を削除しますか？元に戻せません。");
+    if (!ok) return;
+
+    setDeleting(true);
+    setDetailError(null);
+    setDetailMessage(null);
+
+    const { error: storageError } = await supabase.storage
+      .from("picture-sends")
+      .remove([selected.storage_path]);
+
+    if (storageError) {
+      console.error("storage delete failed", storageError);
+      setDetailError(`画像の削除に失敗しました: ${storageError.message}`);
+      setDeleting(false);
+      return;
+    }
+
+    const { error: deleteError } = await supabase
+      .from("picture_sends")
+      .delete()
+      .eq("id", selected.id)
+      .eq("user_id", userId);
+
+    setDeleting(false);
+
+    if (deleteError) {
+      setDetailError(deleteError.message);
+      return;
+    }
+
+    setItems((prev) => prev.filter((item) => item.id !== selected.id));
+    closeDetail();
+    void loadSubjectOptions();
+  }
+
+  return (
+    <div className="mx-auto max-w-4xl px-6 py-8 pb-16">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Images className="h-5 w-5 text-signal" strokeWidth={1.75} />
+          <h1 className="text-lg font-semibold text-ink">アルバム</h1>
+        </div>
+        <div className="flex items-center gap-3 text-sm">
+          <Link
+            href="/send_picture"
+            className="font-medium text-signal transition-colors hover:text-ink"
+          >
+            写真を撮る
+          </Link>
+          <Link
+            href="/"
+            className="font-medium text-signal transition-colors hover:text-ink"
+          >
+            ←戻る
+          </Link>
+        </div>
+      </div>
+
+      <p className="mt-2 text-sm text-ink-soft">
+        送信した写真を一覧表示します。タップで詳細・本文編集・削除ができます。
+      </p>
+
+      <div className="mt-5">
+        <label className="flex flex-col gap-1.5 text-sm sm:flex-row sm:items-center sm:gap-3">
+          <span className="font-medium text-ink">件名</span>
+          <select
+            value={subjectFilter}
+            onChange={(e) => setSubjectFilter(e.target.value)}
+            className="w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-signal focus:ring-1 focus:ring-signal sm:max-w-xs"
+          >
+            <option value={ALL_SUBJECTS}>すべて</option>
+            {subjectOptions.map((subject) => (
+              <option key={subject} value={subject}>
+                {subject}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      {error && (
+        <p className="mt-4 rounded-md bg-alert/10 px-3 py-2 text-sm text-alert">{error}</p>
+      )}
+
+      {loading && <p className="mt-8 text-sm text-ink-soft">読み込み中...</p>}
+
+      {!loading && items.length === 0 && (
+        <p className="mt-8 text-sm text-ink-soft">まだ写真がありません。</p>
+      )}
+
+      {!loading && items.length > 0 && (
+        <ul className="mt-6 grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-3">
+          {items.map((item) => (
+            <li key={item.id}>
+              <button
+                type="button"
+                onClick={() => openDetail(item)}
+                className="group flex w-full flex-col overflow-hidden rounded-md border border-line bg-white text-left transition hover:border-signal/50"
+              >
+                <div className="aspect-square w-full overflow-hidden bg-line">
+                  {item.thumbnailUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={item.thumbnailUrl}
+                      alt=""
+                      className="h-full w-full object-cover transition group-hover:scale-[1.02]"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-[10px] text-ink-soft">
+                      画像なし
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-0.5 p-1.5 sm:p-2">
+                  <p className="truncate text-[11px] font-medium text-ink sm:text-xs">
+                    {item.subject_text}
+                  </p>
+                  <p className="truncate text-[10px] text-ink-soft">
+                    {formatTimestamp(item.created_at)}
+                  </p>
+                </div>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {hasMore && (
+        <div className="mt-6 flex justify-center">
+          <button
+            type="button"
+            disabled={loadingMore}
+            onClick={() => void loadPage(items.length, true)}
+            className="rounded-md border border-line bg-white px-4 py-2 text-sm font-medium text-ink transition hover:border-signal/50 disabled:opacity-50"
+          >
+            {loadingMore ? "読み込み中..." : "もっと見る"}
+          </button>
+        </div>
+      )}
+
+      {selected && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-ink/50 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="album-detail-title"
+          onClick={closeDetail}
+        >
+          <div
+            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg border border-line bg-white p-4 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <h2 id="album-detail-title" className="text-base font-semibold text-ink">
+                {selected.subject_text}
+              </h2>
+              <button
+                type="button"
+                onClick={closeDetail}
+                className="text-sm text-ink-soft hover:text-ink"
+              >
+                閉じる
+              </button>
+            </div>
+
+            <p className="mt-1 text-xs text-ink-soft">
+              {formatTimestamp(selected.created_at)}
+            </p>
+
+            <div className="mt-3 overflow-hidden rounded-md border border-line bg-black">
+              {selected.thumbnailUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={selected.thumbnailUrl}
+                  alt={selected.subject_text}
+                  className="max-h-[50vh] w-full object-contain"
+                />
+              ) : (
+                <div className="flex h-40 items-center justify-center text-sm text-white/80">
+                  画像を表示できません
+                </div>
+              )}
+            </div>
+
+            <label className="mt-4 block space-y-1.5">
+              <span className="text-sm font-medium text-ink">本文</span>
+              <textarea
+                value={bodyDraft}
+                onChange={(e) => setBodyDraft(e.target.value)}
+                rows={4}
+                disabled={savingBody || deleting}
+                className="w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-signal focus:ring-1 focus:ring-signal disabled:opacity-50"
+              />
+            </label>
+
+            {detailMessage && (
+              <p className="mt-2 rounded-md bg-signal/10 px-3 py-2 text-sm text-signal">
+                {detailMessage}
+              </p>
+            )}
+            {detailError && (
+              <p className="mt-2 rounded-md bg-alert/10 px-3 py-2 text-sm text-alert">
+                {detailError}
+              </p>
+            )}
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void handleSaveBody()}
+                disabled={savingBody || deleting || bodyDraft === selected.body_text}
+                className="rounded-md bg-signal px-4 py-2 text-sm font-medium text-white transition hover:bg-signal/90 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {savingBody ? "保存中..." : "本文を保存"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleDelete()}
+                disabled={savingBody || deleting}
+                className="rounded-md bg-alert px-4 py-2 text-sm font-medium text-white transition hover:bg-alert/90 disabled:opacity-50"
+              >
+                {deleting ? "削除中..." : "削除"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

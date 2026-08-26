@@ -29,6 +29,47 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
   const [autoRunning, setAutoRunning] = useState(false);
   const [savedCount, setSavedCount] = useState(0);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const [clearWarning, setClearWarning] = useState<string | null>(null);
+
+  const clearOwnAutoCaptures = useCallback(async () => {
+    setClearWarning(null);
+    try {
+      const { data: rows, error: selectError } = await supabase
+        .from("auto_captures")
+        .select("id, storage_path")
+        .eq("tenant_id", tenantId)
+        .eq("captured_by", userId);
+
+      if (selectError) throw selectError;
+      if (!rows || rows.length === 0) return;
+
+      const paths = rows
+        .map((r) => r.storage_path as string)
+        .filter((p) => Boolean(p));
+
+      if (paths.length > 0) {
+        const { error: storageError } = await supabase.storage
+          .from("auto-captures")
+          .remove(paths);
+        if (storageError) throw storageError;
+      }
+
+      const { error: deleteError } = await supabase
+        .from("auto_captures")
+        .delete()
+        .eq("tenant_id", tenantId)
+        .eq("captured_by", userId);
+
+      if (deleteError) throw deleteError;
+    } catch (err) {
+      console.error("clearOwnAutoCaptures failed", err);
+      setClearWarning(
+        err instanceof Error
+          ? `前回データの削除に失敗しました: ${err.message}`
+          : "前回データの削除に失敗しました"
+      );
+    }
+  }, [supabase, tenantId, userId]);
 
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -91,11 +132,19 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
   }, [stopCamera]);
 
   useEffect(() => {
-    void startCamera();
+    let cancelled = false;
+
+    void (async () => {
+      await clearOwnAutoCaptures();
+      if (cancelled) return;
+      await startCamera();
+    })();
+
     return () => {
+      cancelled = true;
       stopCamera();
     };
-  }, [startCamera, stopCamera]);
+  }, [clearOwnAutoCaptures, startCamera, stopCamera]);
 
   const captureAndUpload = useCallback(async () => {
     const video = videoRef.current;
@@ -216,7 +265,14 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
       </div>
       <p className="text-sm text-ink/70">
         カメラ映像を表示します。「自動撮影開始」で間隔ごとに取得＆保存を開始し、「停止」で終了します。
+        この画面を開くと、前回保存した自分の定点監視画像は削除されます。
       </p>
+
+      {clearWarning && (
+        <p className="rounded-md bg-alert/10 px-3 py-2 text-sm text-alert">
+          {clearWarning}
+        </p>
+      )}
 
       <div className="overflow-hidden rounded-lg border border-line bg-black">
         <div className="relative aspect-[3/4] w-full bg-black">

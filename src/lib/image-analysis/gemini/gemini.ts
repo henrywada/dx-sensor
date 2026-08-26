@@ -1,7 +1,12 @@
 import type { FetchImpl, VisionAnalyzeInput, VisionAnalyzeResult } from "../types";
 
+type GeminiAnalyzeInput = VisionAnalyzeInput & {
+  previousImageBuffer?: Buffer;
+  previousMimeType?: string;
+};
+
 export async function analyzeWithGemini(
-  input: VisionAnalyzeInput,
+  input: GeminiAnalyzeInput,
   options: { apiKey: string; model?: string; fetchImpl?: FetchImpl }
 ): Promise<VisionAnalyzeResult> {
   const fetchImpl = options.fetchImpl ?? fetch;
@@ -10,23 +15,33 @@ export async function analyzeWithGemini(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent` +
     `?key=${encodeURIComponent(options.apiKey)}`;
 
+  type ContentPart =
+    | { text: string }
+    | { inline_data: { mime_type: string; data: string } };
+
+  const parts: ContentPart[] = [{ text: input.prompt }];
+
+  if (input.previousImageBuffer) {
+    parts.push({
+      inline_data: {
+        mime_type: input.previousMimeType ?? input.mimeType,
+        data: input.previousImageBuffer.toString("base64"),
+      },
+    });
+  }
+
+  parts.push({
+    inline_data: {
+      mime_type: input.mimeType,
+      data: input.imageBuffer.toString("base64"),
+    },
+  });
+
   const res = await fetchImpl(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      contents: [
-        {
-          parts: [
-            { text: input.prompt },
-            {
-              inline_data: {
-                mime_type: input.mimeType,
-                data: input.imageBuffer.toString("base64"),
-              },
-            },
-          ],
-        },
-      ],
+      contents: [{ parts }],
     }),
   });
 

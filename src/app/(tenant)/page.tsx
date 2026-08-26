@@ -1,4 +1,4 @@
-import { Aperture, ImagePlus } from "lucide-react";
+import { Aperture, Bell, ImagePlus, Images } from "lucide-react";
 import { AppCard, type AppCardProps } from "@/components/ui/AppCard";
 
 interface Category {
@@ -22,6 +22,12 @@ const categories: Category[] = [
         description: "スマホのカメラ映像をAIで解析し、変化を監視します。",
         href: "/capture_auto",
       },
+      {
+        icon: Bell,
+        title: "監視分析を見る",
+        description: "保存された定点監視画像を比較し、変化の大きさとAI要約を確認します。",
+        href: "/capture_auto_analyze",
+      },
     ],
   },
   {
@@ -32,6 +38,12 @@ const categories: Category[] = [
         title: "スマホ写真にコメントを付けて保存",
         description: "件名と本文を付けて写真を撮影し、保存します。",
         href: "/send_picture",
+      },
+      {
+        icon: Images,
+        title: "アルバム表示",
+        description: "保存した写真をグリッドで見返し、本文の編集や削除ができます。",
+        href: "/send_picture_album",
       },
     ],
   },
