@@ -16,8 +16,6 @@ import type {
 const SLOT_COUNT = 10;
 const TICK_INTERVAL_MS = 5_000;
 const IMAGE_PAGE_SIZE = 80;
-const ALL_IMAGES = "all";
-const SESSION_IMAGES = "session";
 const PROCESSED_ALL = "all";
 const PROCESSED_UNPROCESSED = "unprocessed";
 const PROCESSED_DONE = "processed";
@@ -25,7 +23,6 @@ const HISTORY_ALL = "all";
 const HISTORY_EVENTS_ONLY = "events";
 
 type TabId = "settings" | "status" | "history" | "images";
-type ImageFilter = typeof ALL_IMAGES | typeof SESSION_IMAGES;
 type ProcessedFilter =
   | typeof PROCESSED_ALL
   | typeof PROCESSED_UNPROCESSED
@@ -148,7 +145,6 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
   const [tickRunning, setTickRunning] = useState(false);
   const [tickError, setTickError] = useState<string | null>(null);
 
-  const [imageFilter, setImageFilter] = useState<ImageFilter>(ALL_IMAGES);
   const [processedFilter, setProcessedFilter] = useState<ProcessedFilter>(PROCESSED_ALL);
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>(HISTORY_EVENTS_ONLY);
   const [images, setImages] = useState<CaptureImage[]>([]);
@@ -278,15 +274,6 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
       .order("created_at", { ascending: false })
       .limit(IMAGE_PAGE_SIZE);
 
-    if (imageFilter === SESSION_IMAGES) {
-      if (!monitoringStartedAt) {
-        setImages([]);
-        setImagesLoading(false);
-        return;
-      }
-      query = query.gte("created_at", monitoringStartedAt);
-    }
-
     if (processedFilter === PROCESSED_UNPROCESSED) {
       query = query.is("processed_at", null);
     } else if (processedFilter === PROCESSED_DONE) {
@@ -322,7 +309,7 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
     const withUrls = await attachSignedUrls(rows, ordinalById);
     setImages(withUrls);
     setImagesLoading(false);
-  }, [attachSignedUrls, imageFilter, monitoringStartedAt, processedFilter, supabase, tenantId, userId]);
+  }, [attachSignedUrls, processedFilter, supabase, tenantId, userId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -999,21 +986,6 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
             </button>
           </div>
 
-          <div className="mt-4 flex flex-wrap gap-2">
-            <FilterButton
-              active={imageFilter === ALL_IMAGES}
-              onClick={() => setImageFilter(ALL_IMAGES)}
-            >
-              全部
-            </FilterButton>
-            <FilterButton
-              active={imageFilter === SESSION_IMAGES}
-              onClick={() => setImageFilter(SESSION_IMAGES)}
-            >
-              今回の監視分
-            </FilterButton>
-          </div>
-
           {imagesError && (
             <p className="mt-4 rounded-md bg-alert/10 px-3 py-2 text-sm text-alert">
               {imagesError}
@@ -1275,30 +1247,6 @@ function TabButton({
       onClick={onClick}
       className={`rounded-md px-2 py-2 text-xs font-medium transition sm:text-sm ${
         active ? "bg-signal text-white" : "text-ink-soft hover:bg-signal-soft hover:text-ink"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function FilterButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${
-        active
-          ? "bg-signal text-white"
-          : "border border-line bg-white text-ink hover:border-signal/50"
       }`}
     >
       {children}
