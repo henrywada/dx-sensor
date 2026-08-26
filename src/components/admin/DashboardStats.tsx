@@ -1,7 +1,9 @@
 "use client";
 
 import type { DashboardStats } from "@/lib/admin/getDashboardStats";
+import { formatCostYen } from "@/lib/image-analysis/estimateCostYen";
 import { CurvedLineChart } from "./CurvedLineChart";
+import { DailyBarChart } from "./DailyBarChart";
 
 function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString("ja-JP", {
@@ -63,6 +65,28 @@ export function DashboardStatsView({ stats }: DashboardStatsProps) {
               ))}
             </tbody>
           </table>
+        </div>
+      </section>
+
+      <section>
+        <div className="flex items-end justify-between gap-4">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-ink-soft">
+            画像解析APIコスト（直近30日・日別・概算）
+          </h2>
+          <p className="text-sm text-ink-soft">
+            期間合計{" "}
+            <span className="font-en text-2xl font-semibold text-ink">
+              {formatCostYen(stats.analysisCostTotalYen)}
+            </span>
+          </p>
+        </div>
+        <div className="mt-3 rounded-md border border-line bg-white p-4">
+          <p className="text-xs text-ink-soft">
+            Gemini / Claude / GPT / Plate Recognizer 等の実行ログ合計（円）
+          </p>
+          <div className="mt-3">
+            <DailyBarChart data={stats.analysisCost} fill="#0055ff" />
+          </div>
         </div>
       </section>
 

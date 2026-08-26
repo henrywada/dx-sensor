@@ -14,9 +14,16 @@ export type DailyCountPoint = {
   count: number;
 };
 
+export type DailyYenPoint = {
+  date: string; // YYYY-MM-DD (JST)
+  yen: number;
+};
+
 export type DashboardStats = {
   users: DashboardUserRow[];
   userCount: number;
+  analysisCost: DailyYenPoint[];
+  analysisCostTotalYen: number;
   overall: DailyCountPoint[];
   monitorCamera: DailyCountPoint[];
   pictureSave: DailyCountPoint[];
@@ -59,6 +66,29 @@ function bucketByJstDate(
     }
   }
   return dateKeys.map((date) => ({ date, count: counts.get(date) ?? 0 }));
+}
+
+/** Sum estimated_cost_yen by JST calendar day. Null costs are skipped. */
+export function bucketYenByJstDate(
+  rows: { created_at: string; estimated_cost_yen: number | null }[],
+  dateKeys: string[]
+): DailyYenPoint[] {
+  const sums = new Map(dateKeys.map((k) => [k, 0]));
+  for (const row of rows) {
+    if (row.estimated_cost_yen == null) continue;
+    const key = formatJstDate(new Date(row.created_at));
+    if (sums.has(key)) {
+      sums.set(key, (sums.get(key) ?? 0) + row.estimated_cost_yen);
+    }
+  }
+  return dateKeys.map((date) => ({
+    date,
+    yen: Math.round((sums.get(date) ?? 0) * 1000) / 1000,
+  }));
+}
+
+function emptyYenSeries(dateKeys: string[]): DailyYenPoint[] {
+  return dateKeys.map((date) => ({ date, yen: 0 }));
 }
 
 async function listAllUsers(
@@ -105,7 +135,7 @@ export async function getDashboardStats(
   const dateKeys = buildJstDateKeys(days);
   const rangeStart = `${dateKeys[0]}T00:00:00+09:00`;
 
-  const [users, capturesRes, sendsRes] = await Promise.all([
+  const [users, capturesRes, sendsRes, analysisRes] = await Promise.all([
     listAllUsers(supabase),
     supabase
       .from("manual_captures")
@@ -115,13 +145,23 @@ export async function getDashboardStats(
       .from("picture_sends")
       .select("created_at")
       .gte("created_at", rangeStart),
+    supabase
+      .from("image_analysis_runs")
+      .select("created_at, estimated_cost_yen")
+      .gte("created_at", rangeStart),
   ]);
 
   if (capturesRes.error) throw capturesRes.error;
   if (sendsRes.error) throw sendsRes.error;
+  if (analysisRes.error) throw analysisRes.error;
 
   const captureTs = (capturesRes.data ?? []).map((r) => r.created_at as string);
   const sendTs = (sendsRes.data ?? []).map((r) => r.created_at as string);
+  const analysisRows = (analysisRes.data ?? []).map((r) => ({
+    created_at: r.created_at as string,
+    estimated_cost_yen:
+      r.estimated_cost_yen == null ? null : Number(r.estimated_cost_yen),
+  }));
 
   const monitorCamera =
     captureTs.length > 0 ? bucketByJstDate(captureTs, dateKeys) : emptySeries(dateKeys);
@@ -131,10 +171,18 @@ export async function getDashboardStats(
     date,
     count: monitorCamera[i].count + pictureSave[i].count,
   }));
+  const analysisCost =
+    analysisRows.length > 0
+      ? bucketYenByJstDate(analysisRows, dateKeys)
+      : emptyYenSeries(dateKeys);
+  const analysisCostTotalYen =
+    Math.round(analysisCost.reduce((sum, p) => sum + p.yen, 0) * 1000) / 1000;
 
   return {
     users,
     userCount: users.length,
+    analysisCost,
+    analysisCostTotalYen,
     overall,
     monitorCamera,
     pictureSave,

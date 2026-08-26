@@ -7,9 +7,12 @@ import {
 
 function zeroStats(): DashboardStats {
   const zeros = buildJstDateKeys(30).map((date) => ({ date, count: 0 }));
+  const yenZeros = buildJstDateKeys(30).map((date) => ({ date, yen: 0 }));
   return {
     users: [],
     userCount: 0,
+    analysisCost: yenZeros,
+    analysisCostTotalYen: 0,
     overall: zeros,
     monitorCamera: zeros,
     pictureSave: zeros,

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getActiveTenant } from "@/lib/auth/getActiveTenant";
 import { getViewerContext } from "@/lib/auth/getViewerContext";
+import { extractTokenUsage } from "@/lib/image-analysis/estimateCostYen";
 import { AnalysisError, runAnalysis } from "@/lib/image-analysis/runAnalysis";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { parseAnalyzeRequest } from "./parseAnalyzeRequest";
@@ -49,6 +50,21 @@ export async function POST(req: Request) {
       mimeType: file.type || "image/jpeg",
       prompt: parsed.prompt,
     });
+
+    const usage = extractTokenUsage(parsed.provider, result.raw);
+    const { error: logError } = await supabase.from("image_analysis_runs").insert({
+      tenant_id: tenant.tenantId,
+      user_id: viewer.userId,
+      capture_id: capture.id,
+      provider: parsed.provider,
+      estimated_cost_yen: result.estimatedCostYen ?? null,
+      input_tokens: usage?.inputTokens ?? null,
+      output_tokens: usage?.outputTokens ?? null,
+    });
+    if (logError) {
+      console.error("image_analysis_runs insert failed", logError);
+    }
+
     return NextResponse.json({
       text: result.text,
       provider: parsed.provider,
