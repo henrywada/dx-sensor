@@ -150,6 +150,7 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
   const [images, setImages] = useState<CaptureImage[]>([]);
   const [imagesLoading, setImagesLoading] = useState(false);
   const [imagesError, setImagesError] = useState<string | null>(null);
+  const [imagePreview, setImagePreview] = useState<CaptureImage | null>(null);
 
   const lastCurrCaptureIdRef = useRef<string | null>(null);
   const tickInFlightRef = useRef(false);
@@ -999,18 +1000,34 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
           {!imagesLoading && images.length > 0 && (
             <ul className="mt-5 grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
               {images.map((image) => (
-                <li key={image.id} className="overflow-hidden rounded-md border border-line bg-white">
-                  <NaturalAspectImage src={image.signedUrl} className="bg-line" maxHeightClassName="max-h-40" />
-                  <div className="p-1.5 text-[10px] text-ink-soft">
-                    <p>{formatTimestamp(image.created_at)}</p>
-                    <p>
-                      {image.imageNo != null ? (
-                        <span className="font-en">#{image.imageNo}</span>
-                      ) : null}
-                      {image.imageNo != null ? " " : ""}
-                      {image.processed_at ? "処理済み" : "未処理"}
-                    </p>
-                  </div>
+                <li key={image.id}>
+                  <button
+                    type="button"
+                    disabled={!image.signedUrl}
+                    onClick={() => setImagePreview(image)}
+                    className="w-full overflow-hidden rounded-md border border-line bg-white text-left transition hover:border-signal/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal disabled:cursor-not-allowed disabled:opacity-60"
+                    aria-label={
+                      image.imageNo != null
+                        ? `画像 #${image.imageNo} を拡大表示`
+                        : "画像を拡大表示"
+                    }
+                  >
+                    <NaturalAspectImage
+                      src={image.signedUrl}
+                      className="bg-line"
+                      maxHeightClassName="max-h-40"
+                    />
+                    <div className="p-1.5 text-[10px] text-ink-soft">
+                      <p>{formatTimestamp(image.created_at)}</p>
+                      <p>
+                        {image.imageNo != null ? (
+                          <span className="font-en">#{image.imageNo}</span>
+                        ) : null}
+                        {image.imageNo != null ? " " : ""}
+                        {image.processed_at ? "処理済み" : "未処理"}
+                      </p>
+                    </div>
+                  </button>
                 </li>
               ))}
             </ul>
@@ -1112,6 +1129,55 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
         </div>
       )}
 
+
+      {imagePreview && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="image-preview-modal-title"
+          onClick={() => setImagePreview(null)}
+        >
+          <div
+            className="flex max-h-[min(92vh,900px)] w-full max-w-4xl flex-col rounded-lg border border-line bg-white shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex shrink-0 items-start justify-between gap-3 border-b border-line px-5 py-3">
+              <h2 id="image-preview-modal-title" className="text-base font-semibold text-ink">
+                画像プレビュー
+                {imagePreview.imageNo != null ? (
+                  <span className="ml-2 font-en text-sm font-medium text-ink-soft">
+                    #{imagePreview.imageNo}
+                  </span>
+                ) : null}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setImagePreview(null)}
+                className="text-sm text-ink-soft hover:text-ink"
+              >
+                閉じる
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+              <NaturalAspectImage
+                src={imagePreview.signedUrl}
+                alt={
+                  imagePreview.imageNo != null
+                    ? `画像 #${imagePreview.imageNo}`
+                    : "拡大画像"
+                }
+                maxHeightClassName="max-h-[75vh]"
+              />
+              <p className="mt-3 text-sm text-ink-soft">
+                {formatTimestamp(imagePreview.created_at)}
+                {" · "}
+                {imagePreview.processed_at ? "処理済み" : "未処理"}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {eventCompareModal && (
         <div
