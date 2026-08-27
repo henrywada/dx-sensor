@@ -86,6 +86,7 @@ export function captureFrameFromVideo(
   return canvas;
 }
 
+/** Preview box shape — matches mount so landscape mount is always wide. */
 export function previewAspectClass(mount: MountOrientation): string {
-  return mount === "landscape" ? "aspect-video" : "aspect-[3/4]";
+  return mount === "landscape" ? "aspect-[16/9]" : "aspect-[3/4]";
 }

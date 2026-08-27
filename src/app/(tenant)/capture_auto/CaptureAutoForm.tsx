@@ -283,7 +283,11 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
   }
 
   return (
-    <div className="mx-auto flex max-w-md flex-col gap-4 p-6">
+    <div
+      className={`mx-auto flex w-full flex-col gap-4 p-6 ${
+        mountOrientation === "landscape" ? "max-w-3xl" : "max-w-md"
+      }`}
+    >
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <h1 className="text-lg font-semibold text-ink">固定撮影</h1>
@@ -336,7 +340,7 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
             playsInline
             muted
             autoPlay
-            className={`h-full w-full object-contain ${
+            className={`h-full w-full object-cover ${
               cameraState === "ready" ? "opacity-100" : "opacity-0"
             }`}
           />
