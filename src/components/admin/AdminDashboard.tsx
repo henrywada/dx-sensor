@@ -16,12 +16,19 @@ import { AppCard, type AppCardProps } from "@/components/ui/AppCard";
 import type { DashboardStats } from "@/lib/admin/getDashboardStats";
 import { DashboardStatsView } from "./DashboardStats";
 
+interface AdminAppSection {
+  label: string;
+  apps: AppCardProps[];
+}
+
 interface AdminCategory {
   key: string;
   label: string;
   icon: typeof LayoutDashboard;
   description: string;
   apps: AppCardProps[];
+  /** Optional subsections (e.g. スマホカメラ / その他). When set, preferred over flat apps. */
+  sections?: AdminAppSection[];
 }
 
 interface AdminGroup {
@@ -77,20 +84,35 @@ const groups: AdminGroup[] = [
         label: "カメラ/センサー管理",
         icon: Camera,
         description: "観測に使用する機器の登録・認証情報を管理します。",
-        apps: [
+        apps: [],
+        sections: [
           {
-            icon: Camera,
-            eyebrow: "観測機器",
-            title: "カメラ一覧",
-            description: "登録済みカメラ(ONVIF/SoraCam)の一覧を確認します。",
-            badge: "準備中",
+            label: "スマホカメラ",
+            apps: [
+              {
+                icon: Upload,
+                title: "手動撮影アップロード",
+                description: "スマホのカメラで撮影した写真をその場でアップロードします。",
+                href: "/admin/capture",
+              },
+              {
+                icon: Sparkles,
+                title: "画像解析",
+                description: "保存済みの画像にAI解析を実行し、命令に応じた結果を確認します。",
+                href: "/admin/analyze",
+              },
+            ],
           },
           {
-            icon: KeyRound,
-            eyebrow: "エージェント",
-            title: "エージェントAPIキー発行",
-            description: "テナント拠点のエージェント用APIキーを発行します。",
-            badge: "準備中",
+            label: "その他",
+            apps: [
+              {
+                icon: Camera,
+                title: "カメラ一覧",
+                description: "登録済みカメラ(ONVIF/SoraCam)の一覧を確認します。",
+                badge: "準備中",
+              },
+            ],
           },
         ],
       },
@@ -113,20 +135,6 @@ const groups: AdminGroup[] = [
             href: "/debug",
           },
           {
-            icon: Upload,
-            eyebrow: "手動取得",
-            title: "手動撮影アップロード",
-            description: "スマホのカメラで撮影した写真をその場でアップロードします。",
-            href: "/admin/capture",
-          },
-          {
-            icon: Sparkles,
-            eyebrow: "AI解析",
-            title: "画像解析",
-            description: "保存済みの画像にAI解析を実行し、命令に応じた結果を確認します。",
-            href: "/admin/analyze",
-          },
-          {
             icon: Database,
             eyebrow: "観測記録",
             title: "観測イベント一覧",
@@ -146,6 +154,13 @@ const groups: AdminGroup[] = [
         icon: Settings,
         description: "認証情報や全体設定を管理します。",
         apps: [
+          {
+            icon: KeyRound,
+            eyebrow: "エージェント",
+            title: "エージェントAPIキー発行",
+            description: "テナント拠点のエージェント用APIキーを発行します。",
+            badge: "準備中",
+          },
           {
             icon: KeyRound,
             eyebrow: "認証情報",
@@ -217,6 +232,21 @@ export function AdminDashboard({ stats, statsError = null }: AdminDashboardProps
             ) : (
               <DashboardStatsView stats={stats} />
             )
+          ) : selected.sections && selected.sections.length > 0 ? (
+            <div className="mt-6 space-y-8">
+              {selected.sections.map((section) => (
+                <section key={section.label}>
+                  <h2 className="mb-3 text-sm font-bold tracking-wide text-ink-soft">
+                    {section.label}
+                  </h2>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    {section.apps.map((app) => (
+                      <AppCard key={app.title} {...app} />
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
           ) : (
             <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
               {selected.apps.map((app) => (

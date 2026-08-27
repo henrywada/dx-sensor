@@ -37,19 +37,16 @@ export function AppCard({ icon: Icon, eyebrow, title, description, href, badge }
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-signal-soft text-signal">
           <Icon className="h-4.5 w-4.5" strokeWidth={1.75} />
         </span>
-        <h3 className="text-base font-bold text-ink">{title}</h3>
-      </div>
-
-      <p className="mt-2 flex-1 text-sm leading-relaxed text-ink-soft">{description}</p>
-
-      {!disabled && (
-        <div className="mt-4 flex justify-end border-t border-line pt-3">
-          <span className="flex items-center gap-1 text-sm font-medium text-signal">
+        <h3 className="min-w-0 flex-1 text-base font-bold text-ink">{title}</h3>
+        {!disabled && (
+          <span className="ml-auto flex shrink-0 items-center gap-1 text-sm font-medium text-signal">
             進む
             <ArrowRight className="h-3.5 w-3.5" strokeWidth={2} />
           </span>
-        </div>
-      )}
+        )}
+      </div>
+
+      <p className="mt-2 text-sm leading-relaxed text-ink-soft">{description}</p>
     </div>
   );
 
