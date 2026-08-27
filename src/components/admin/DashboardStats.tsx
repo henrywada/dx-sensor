@@ -98,7 +98,7 @@ export function DashboardStatsView({ stats }: DashboardStatsProps) {
         <div className="rounded-md border border-line bg-white p-4">
           <h3 className="text-sm font-semibold text-ink">全体</h3>
           <p className="mt-0.5 text-xs text-ink-soft">
-            スマホ監視カメラ + 写真保存
+            スマホ監視カメラ + 写真レポート
           </p>
           <div className="mt-3">
             <CurvedLineChart data={stats.overall} stroke="#0e7c86" />
@@ -114,7 +114,7 @@ export function DashboardStatsView({ stats }: DashboardStatsProps) {
             </div>
           </div>
           <div className="rounded-md border border-line bg-white p-4">
-            <h3 className="text-sm font-semibold text-ink">写真保存</h3>
+            <h3 className="text-sm font-semibold text-ink">写真レポート</h3>
             <p className="mt-0.5 text-xs text-ink-soft">picture_sends 日別件数</p>
             <div className="mt-3">
               <CurvedLineChart data={stats.pictureSave} stroke="#c45c26" />
