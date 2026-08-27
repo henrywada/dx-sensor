@@ -833,18 +833,11 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
             )}
           </div>
 
-          <div className="grid grid-cols-1 gap-4">
-            <ImagePanel
-              title="今回画像"
-              imageNo={currImageNo}
-              url={currImageUrl}
-            />
-            <ImagePanel
-              title="前回画像"
-              imageNo={prevImageNo}
-              url={prevImageUrl}
-            />
-          </div>
+          <CompareImageGrid
+            probeUrl={currImageUrl ?? prevImageUrl}
+            curr={{ title: "今回画像", imageNo: currImageNo, url: currImageUrl }}
+            prev={{ title: "前回画像", imageNo: prevImageNo, url: prevImageUrl }}
+          />
 
         </section>
       )}
@@ -1159,18 +1152,20 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
                 </p>
               )}
               {!eventCompareModal.loading && !eventCompareModal.error && (
-                <div className="grid gap-4 md:grid-cols-2">
-                  <ImagePanel
-                    title="前回画像"
-                    imageNo={eventCompareModal.prevNo}
-                    url={eventCompareModal.prevUrl}
-                  />
-                  <ImagePanel
-                    title="今回画像"
-                    imageNo={eventCompareModal.currNo}
-                    url={eventCompareModal.currUrl}
-                  />
-                </div>
+                <CompareImageGrid
+                  probeUrl={eventCompareModal.currUrl ?? eventCompareModal.prevUrl}
+                  curr={{
+                    title: "今回画像",
+                    imageNo: eventCompareModal.currNo,
+                    url: eventCompareModal.currUrl,
+                  }}
+                  prev={{
+                    title: "前回画像",
+                    imageNo: eventCompareModal.prevNo,
+                    url: eventCompareModal.prevUrl,
+                  }}
+                  preferPrevFirst
+                />
               )}
             </div>
           </div>
@@ -1334,10 +1329,12 @@ function ImagePanel({
   title,
   imageNo,
   url,
+  maxHeightClassName,
 }: {
   title: string;
   imageNo: number | null;
   url: string | null;
+  maxHeightClassName?: string;
 }) {
   return (
     <div className="overflow-hidden rounded-lg border border-line bg-white">
@@ -1347,7 +1344,69 @@ function ImagePanel({
           <span className="ml-2 font-en text-ink-soft">#{imageNo}</span>
         ) : null}
       </div>
-      <NaturalAspectImage src={url} alt={title} />
+      <NaturalAspectImage
+        src={url}
+        alt={title}
+        maxHeightClassName={maxHeightClassName}
+      />
+    </div>
+  );
+}
+
+type ComparePanel = {
+  title: string;
+  imageNo: number | null;
+  url: string | null;
+};
+
+/** Portrait → 2-up grid; landscape → stacked rows (current layout). */
+function CompareImageGrid({
+  probeUrl,
+  curr,
+  prev,
+  preferPrevFirst = false,
+}: {
+  probeUrl: string | null;
+  curr: ComparePanel;
+  prev: ComparePanel;
+  preferPrevFirst?: boolean;
+}) {
+  const [isPortrait, setIsPortrait] = useState(false);
+
+  useEffect(() => {
+    setIsPortrait(false);
+    if (!probeUrl) return;
+
+    let cancelled = false;
+    const img = new window.Image();
+    img.onload = () => {
+      if (cancelled) return;
+      setIsPortrait(img.naturalHeight > img.naturalWidth);
+    };
+    img.onerror = () => {
+      if (!cancelled) setIsPortrait(false);
+    };
+    img.src = probeUrl;
+
+    return () => {
+      cancelled = true;
+    };
+  }, [probeUrl]);
+
+  const maxHeightClassName = isPortrait ? "max-h-[55vh]" : "max-h-[70vh]";
+  const panels = preferPrevFirst ? [prev, curr] : [curr, prev];
+
+  return (
+    <div className={`grid gap-4 ${isPortrait ? "grid-cols-2" : "grid-cols-1"}`}>
+      {panels.map((panel) => (
+        <ImagePanel
+          key={panel.title}
+          title={panel.title}
+          imageNo={panel.imageNo}
+          url={panel.url}
+          maxHeightClassName={maxHeightClassName}
+        />
+      ))}
     </div>
   );
 }
