@@ -14,7 +14,7 @@ interface Category {
  */
 const categories: Category[] = [
   {
-    label: "スマホ監視カメラ",
+    label: "定点監視カメラ",
     apps: [
       {
         icon: Aperture,
@@ -31,7 +31,7 @@ const categories: Category[] = [
     ],
   },
   {
-    label: "写真保存",
+    label: "写真レポート",
     apps: [
       {
         icon: ImagePlus,

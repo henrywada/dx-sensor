@@ -833,9 +833,19 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
             )}
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <ImagePanel title="前回画像" imageNo={prevImageNo} url={prevImageUrl} />
-            <ImagePanel title="今回画像" imageNo={currImageNo} url={currImageUrl} />
+          <div className="grid grid-cols-1 gap-4">
+            <ImagePanel
+              title="今回画像"
+              imageNo={currImageNo}
+              url={currImageUrl}
+              aspectClassName="aspect-video"
+            />
+            <ImagePanel
+              title="前回画像"
+              imageNo={prevImageNo}
+              url={prevImageUrl}
+              aspectClassName="aspect-video"
+            />
           </div>
 
         </section>
@@ -1308,10 +1318,12 @@ function ImagePanel({
   title,
   imageNo,
   url,
+  aspectClassName = "aspect-[3/4] max-h-[70vh]",
 }: {
   title: string;
   imageNo: number | null;
   url: string | null;
+  aspectClassName?: string;
 }) {
   return (
     <div className="overflow-hidden rounded-lg border border-line bg-white">
@@ -1321,7 +1333,7 @@ function ImagePanel({
           <span className="ml-2 font-en text-ink-soft">#{imageNo}</span>
         ) : null}
       </div>
-      <div className="aspect-[3/4] max-h-[70vh] bg-line">
+      <div className={`${aspectClassName} bg-line`}>
         {url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={url} alt={title} className="h-full w-full object-contain" />

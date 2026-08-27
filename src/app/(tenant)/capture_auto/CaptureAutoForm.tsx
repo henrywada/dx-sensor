@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { HelpCircle } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { CaptureHintModal } from "./CaptureHintModal";
 
 interface CaptureAutoFormProps {
   tenantId: string;
@@ -30,6 +32,7 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
   const [savedCount, setSavedCount] = useState(0);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [clearWarning, setClearWarning] = useState<string | null>(null);
+  const [hintOpen, setHintOpen] = useState(false);
 
   const clearOwnAutoCaptures = useCallback(async () => {
     setClearWarning(null);
@@ -267,17 +270,25 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
             </span>
           )}
         </div>
-        <Link
-          href="/"
-          className="shrink-0 text-sm font-medium text-signal transition-colors hover:text-ink"
-        >
-          ←戻る
-        </Link>
+        <div className="flex shrink-0 items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setHintOpen(true)}
+            className="flex items-center gap-1 text-sm font-medium text-signal transition-colors hover:text-ink"
+          >
+            <HelpCircle className="h-4 w-4" strokeWidth={1.75} />
+            ヒント
+          </button>
+          <Link
+            href="/"
+            className="text-sm font-medium text-signal transition-colors hover:text-ink"
+          >
+            ←戻る
+          </Link>
+        </div>
       </div>
-      <p className="text-sm text-ink/70">
-        カメラ映像を表示します。「自動撮影開始」で間隔ごとに取得＆保存を開始し、「停止」で終了します。
-        この画面を開くと、前回保存した自分の定点監視画像は削除されます。
-      </p>
+
+      <CaptureHintModal open={hintOpen} onClose={() => setHintOpen(false)} />
 
       {clearWarning && (
         <p className="rounded-md bg-alert/10 px-3 py-2 text-sm text-alert">
