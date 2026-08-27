@@ -15,7 +15,11 @@ export function readScreenAngle(): number {
 
 /**
  * Clockwise rotation so saved pixels match the physical mount.
- * Landscape mount ALWAYS yields width > height (unless source is square).
+ *
+ * Landscape mount default assumes the phone is tilted LEFT
+ * (counterclockwise from portrait — natural for right-handed setup),
+ * which maps to a 270° CW bake when the camera stream is still portrait-shaped.
+ * angle === 90 means the device reports a right tilt → bake 90° instead.
  */
 export function computeCaptureRotationDeg(
   mount: MountOrientation,
@@ -34,16 +38,15 @@ export function computeCaptureRotationDeg(
 
   if (wantLandscape) {
     if (streamIsLandscape) {
-      // Already wide — keep as-is (common on some Android devices).
+      // Already wide — keep as-is (some Android devices).
       rotation = 0;
     } else {
-      // Portrait-shaped stream while phone is laid on its side (typical iOS).
-      // angle 270 / -90 → rotate 270° CW; otherwise prefer 90° CW.
-      rotation = normalizedAngle === 270 ? 270 : 90;
+      // Portrait stream + sideways mount. Prefer left-tilt (270° CW).
+      rotation = normalizedAngle === 90 ? 90 : 270;
     }
   } else if (streamIsLandscape) {
-    // Wide stream while phone is upright → make portrait.
-    rotation = normalizedAngle === 270 ? 90 : 270;
+    // Wide stream while upright mount → make portrait.
+    rotation = normalizedAngle === 90 ? 270 : 90;
   }
 
   if (invertDirection && rotation !== 0) {
@@ -86,7 +89,7 @@ export function captureFrameFromVideo(
   return canvas;
 }
 
-/** Preview box shape — matches mount so landscape mount is always wide. */
-export function previewAspectClass(mount: MountOrientation): string {
-  return mount === "landscape" ? "aspect-[16/9]" : "aspect-[3/4]";
+/** Preview box is always portrait; mount only affects save-time rotation. */
+export function previewAspectClass(_mount?: MountOrientation): string {
+  return "aspect-[3/4]";
 }

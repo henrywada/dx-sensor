@@ -6,7 +6,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
   captureFrameFromVideo,
-  previewAspectClass,
   type MountOrientation,
 } from "@/lib/capture/captureFrameFromVideo";
 import { CaptureHintModal } from "./CaptureHintModal";
@@ -283,11 +282,7 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
   }
 
   return (
-    <div
-      className={`mx-auto flex w-full flex-col gap-4 p-6 ${
-        mountOrientation === "landscape" ? "max-w-3xl" : "max-w-md"
-      }`}
-    >
+    <div className="mx-auto flex max-w-md flex-col gap-4 p-6">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <h1 className="text-lg font-semibold text-ink">固定撮影</h1>
@@ -334,7 +329,7 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
             : "border-line"
         }`}
       >
-        <div className={`relative w-full bg-black ${previewAspectClass(mountOrientation)}`}>
+        <div className="relative aspect-[3/4] w-full bg-black">
           <video
             ref={videoRef}
             playsInline
@@ -391,8 +386,8 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
           onChange={(e) => setMountOrientation(e.target.value as MountOrientation)}
           className="rounded-md border border-line bg-white px-3 py-1.5 text-sm outline-none focus:border-signal focus:ring-1 focus:ring-signal disabled:opacity-50"
         >
-          <option value="landscape">横置き固定（画面が横長）</option>
-          <option value="portrait">縦置き固定（画面が縦長）</option>
+          <option value="landscape">横置き固定（左に傾けて設置）</option>
+          <option value="portrait">縦置き固定</option>
         </select>
       </label>
 
@@ -407,7 +402,7 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
         <span>
           保存画像の向きが違うとき：回転方向を反転する
           <span className="mt-0.5 block text-xs text-ink-soft">
-            景色が横倒し／上下逆ならオンにして撮り直してください。
+            右に傾けて設置した場合や、景色が横倒し／上下逆ならオンにして撮り直してください。
           </span>
         </span>
       </label>
