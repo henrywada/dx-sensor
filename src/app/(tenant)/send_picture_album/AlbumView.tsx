@@ -233,7 +233,7 @@ export function AlbumView({ userId }: AlbumViewProps) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Images className="h-5 w-5 text-signal" strokeWidth={1.75} />
-          <h1 className="text-lg font-semibold text-ink">アルバム</h1>
+          <h1 className="text-lg font-semibold text-ink">写真フォルダー</h1>
         </div>
         <div className="flex items-center gap-3 text-sm">
           <Link

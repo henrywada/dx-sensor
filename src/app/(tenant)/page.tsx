@@ -35,13 +35,13 @@ const categories: Category[] = [
     apps: [
       {
         icon: ImagePlus,
-        title: "スマホ写真にコメントを付けて保存",
+        title: "写真レポートの送信",
         description: "件名と本文を付けて写真を撮影し、保存します。",
         href: "/send_picture",
       },
       {
         icon: Images,
-        title: "アルバム表示",
+        title: "写真フォルダーを見る",
         description: "保存した写真をグリッドで見返し、本文の編集や削除ができます。",
         href: "/send_picture_album",
       },
