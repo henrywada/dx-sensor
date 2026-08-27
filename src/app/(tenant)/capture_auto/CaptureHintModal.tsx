@@ -47,6 +47,10 @@ export function CaptureHintModal({ open, onClose }: CaptureHintModalProps) {
             <li>
               「自動撮影開始」で間隔ごとに取得＆保存を開始し、「停止」で終了します。
             </li>
+            <li>
+              「設置向き」はスマホの固定方法に合わせて選んでください（横固定なら
+              ランドスケープ）。保存画像の上下左右が監視画面と一致します。
+            </li>
             <li>この画面を開くと、前回保存した自分の定点監視画像は削除されます。</li>
           </ol>
         </div>

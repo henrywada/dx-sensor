@@ -838,13 +838,11 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
               title="今回画像"
               imageNo={currImageNo}
               url={currImageUrl}
-              aspectClassName="aspect-video"
             />
             <ImagePanel
               title="前回画像"
               imageNo={prevImageNo}
               url={prevImageUrl}
-              aspectClassName="aspect-video"
             />
           </div>
 
@@ -1009,20 +1007,7 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
             <ul className="mt-5 grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
               {images.map((image) => (
                 <li key={image.id} className="overflow-hidden rounded-md border border-line bg-white">
-                  <div className="aspect-[3/4] bg-line">
-                    {image.signedUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={image.signedUrl}
-                        alt=""
-                        className="h-full w-full object-contain"
-                      />
-                    ) : (
-                      <div className="flex h-full items-center justify-center text-[10px] text-ink-soft">
-                        画像なし
-                      </div>
-                    )}
-                  </div>
+                  <NaturalAspectImage src={image.signedUrl} className="bg-line" maxHeightClassName="max-h-40" />
                   <div className="p-1.5 text-[10px] text-ink-soft">
                     <p>{formatTimestamp(image.created_at)}</p>
                     <p>
@@ -1314,16 +1299,60 @@ function Lamp({
   );
 }
 
+function NaturalAspectImage({
+  src,
+  alt = "",
+  className = "",
+  maxHeightClassName = "max-h-[70vh]",
+}: {
+  src: string | null;
+  alt?: string;
+  className?: string;
+  maxHeightClassName?: string;
+}) {
+  const [aspectRatio, setAspectRatio] = useState<number | null>(null);
+
+  useEffect(() => {
+    setAspectRatio(null);
+  }, [src]);
+
+  if (!src) {
+    return (
+      <div className={`flex min-h-32 items-center justify-center text-sm text-ink-soft ${className}`}>
+        画像待機中
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`flex justify-center bg-line ${className}`}
+      style={aspectRatio ? { aspectRatio } : undefined}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt={alt}
+        className={`w-full object-contain ${maxHeightClassName}`}
+        onLoad={(event) => {
+          const img = event.currentTarget;
+          if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+            setAspectRatio(img.naturalWidth / img.naturalHeight);
+          }
+        }}
+      />
+    </div>
+  );
+}
+
 function ImagePanel({
   title,
   imageNo,
   url,
-  aspectClassName = "aspect-[3/4] max-h-[70vh]",
 }: {
   title: string;
   imageNo: number | null;
   url: string | null;
-  aspectClassName?: string;
 }) {
   return (
     <div className="overflow-hidden rounded-lg border border-line bg-white">
@@ -1333,16 +1362,7 @@ function ImagePanel({
           <span className="ml-2 font-en text-ink-soft">#{imageNo}</span>
         ) : null}
       </div>
-      <div className={`${aspectClassName} bg-line`}>
-        {url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={url} alt={title} className="h-full w-full object-contain" />
-        ) : (
-          <div className="flex h-full items-center justify-center text-sm text-ink-soft">
-            画像待機中
-          </div>
-        )}
-      </div>
+      <NaturalAspectImage src={url} alt={title} />
     </div>
   );
 }

@@ -4,6 +4,11 @@ import Link from "next/link";
 import { HelpCircle } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import {
+  captureFrameFromVideo,
+  previewAspectClass,
+  type MountOrientation,
+} from "@/lib/capture/captureFrameFromVideo";
 import { CaptureHintModal } from "./CaptureHintModal";
 
 interface CaptureAutoFormProps {
@@ -15,6 +20,13 @@ type CameraState = "starting" | "ready" | "denied" | "unsupported" | "error";
 type UploadStatus = "idle" | "uploading" | "done" | "error";
 
 const INTERVAL_OPTIONS_SEC = [3, 5, 10, 15, 30, 60] as const;
+const MOUNT_STORAGE_KEY = "dx-sensor.capture-auto.mount";
+
+function readStoredMount(): MountOrientation {
+  if (typeof window === "undefined") return "landscape";
+  const stored = window.localStorage.getItem(MOUNT_STORAGE_KEY);
+  return stored === "portrait" ? "portrait" : "landscape";
+}
 
 export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -33,6 +45,7 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [clearWarning, setClearWarning] = useState<string | null>(null);
   const [hintOpen, setHintOpen] = useState(false);
+  const [mountOrientation, setMountOrientation] = useState<MountOrientation>("landscape");
 
   const clearOwnAutoCaptures = useCallback(async () => {
     setClearWarning(null);
@@ -135,6 +148,14 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
   }, [stopCamera]);
 
   useEffect(() => {
+    setMountOrientation(readStoredMount());
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(MOUNT_STORAGE_KEY, mountOrientation);
+  }, [mountOrientation]);
+
+  useEffect(() => {
     let cancelled = false;
 
     void (async () => {
@@ -166,13 +187,7 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
     setUploadError(null);
 
     try {
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) throw new Error("キャンバスを初期化できませんでした");
-
-      ctx.drawImage(video, 0, 0, width, height);
+      const canvas = captureFrameFromVideo(video, mountOrientation);
 
       const blob = await new Promise<Blob>((resolve, reject) => {
         canvas.toBlob(
@@ -216,7 +231,7 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
     } finally {
       uploadingRef.current = false;
     }
-  }, [supabase, tenantId, userId]);
+  }, [supabase, tenantId, userId, mountOrientation]);
 
   // 自動撮影開始後のみ、間隔ごとに取得＆保存（開始前はプレビュー表示のみ）
   useEffect(() => {
@@ -297,13 +312,13 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
       )}
 
       <div className="overflow-hidden rounded-lg border border-line bg-black">
-        <div className="relative aspect-[3/4] w-full bg-black">
+        <div className={`relative w-full bg-black ${previewAspectClass(mountOrientation)}`}>
           <video
             ref={videoRef}
             playsInline
             muted
             autoPlay
-            className={`h-full w-full object-cover ${
+            className={`h-full w-full object-contain ${
               cameraState === "ready" ? "opacity-100" : "opacity-0"
             }`}
           />
@@ -345,6 +360,19 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
           カメラを再試行
         </button>
       )}
+
+      <label className="flex items-center justify-between gap-3 text-sm text-ink">
+        <span>設置向き</span>
+        <select
+          value={mountOrientation}
+          disabled={autoRunning}
+          onChange={(e) => setMountOrientation(e.target.value as MountOrientation)}
+          className="rounded-md border border-line bg-white px-3 py-1.5 text-sm outline-none focus:border-signal focus:ring-1 focus:ring-signal disabled:opacity-50"
+        >
+          <option value="landscape">横固定（ランドスケープ）</option>
+          <option value="portrait">縦固定（ポートレート）</option>
+        </select>
+      </label>
 
       <label className="flex items-center justify-between gap-3 text-sm text-ink">
         <span>撮影間隔</span>
