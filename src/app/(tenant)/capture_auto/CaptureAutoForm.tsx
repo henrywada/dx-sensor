@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { HelpCircle } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
   captureFrameFromVideo,
@@ -38,7 +38,8 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
   const streamRef = useRef<MediaStream | null>(null);
   const uploadingRef = useRef(false);
   const cameraReadyRef = useRef(false);
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
+  const startGenerationRef = useRef(0);
 
   const [cameraState, setCameraState] = useState<CameraState>("starting");
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -103,6 +104,7 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
   }, []);
 
   const startCamera = useCallback(async () => {
+    const generation = ++startGenerationRef.current;
     setCameraState("starting");
     setCameraError(null);
     cameraReadyRef.current = false;
@@ -117,25 +119,60 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
 
     stopCamera();
 
+    const isStale = () => generation !== startGenerationRef.current;
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: {
-          facingMode: { ideal: "environment" },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-        },
-      });
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+          },
+        });
+      } catch (primaryErr) {
+        console.warn("getUserMedia primary constraints failed, retrying simple", primaryErr);
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: true,
+        });
+      }
+
+      if (isStale()) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
 
       streamRef.current = stream;
       const video = videoRef.current;
-      if (video) {
-        video.srcObject = stream;
+      if (!video) {
+        stream.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+        setCameraState("error");
+        setCameraError("映像要素を初期化できませんでした。再試行してください。");
+        return;
+      }
+
+      video.srcObject = stream;
+      video.setAttribute("playsinline", "true");
+      video.muted = true;
+      try {
+        await video.play();
+      } catch (playErr) {
+        console.warn("video.play() failed once, retrying", playErr);
+        await new Promise((resolve) => window.setTimeout(resolve, 150));
+        if (isStale()) return;
         await video.play();
       }
+
+      if (isStale()) return;
+
       cameraReadyRef.current = true;
       setCameraState("ready");
     } catch (err) {
+      if (isStale()) return;
       console.error("getUserMedia failed", err);
       const name = err instanceof DOMException ? err.name : "";
       if (name === "NotAllowedError" || name === "PermissionDeniedError") {
@@ -166,20 +203,18 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
     window.localStorage.setItem(INVERT_STORAGE_KEY, invertRotation ? "1" : "0");
   }, [invertRotation]);
 
+  // Clear previous captures in the background — never block camera startup.
   useEffect(() => {
-    let cancelled = false;
+    void clearOwnAutoCaptures();
+  }, [clearOwnAutoCaptures]);
 
-    void (async () => {
-      await clearOwnAutoCaptures();
-      if (cancelled) return;
-      await startCamera();
-    })();
-
+  useEffect(() => {
+    void startCamera();
     return () => {
-      cancelled = true;
+      startGenerationRef.current += 1;
       stopCamera();
     };
-  }, [clearOwnAutoCaptures, startCamera, stopCamera]);
+  }, [startCamera, stopCamera]);
 
   const captureAndUpload = useCallback(async () => {
     const video = videoRef.current;
@@ -368,13 +403,13 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
         </div>
       </div>
 
-      {cameraState !== "ready" && cameraState !== "starting" && (
+      {cameraState !== "ready" && (
         <button
           type="button"
           onClick={() => void startCamera()}
           className="rounded-md border border-line bg-white px-4 py-2 text-sm font-medium text-ink transition hover:border-signal/50"
         >
-          カメラを再試行
+          {cameraState === "starting" ? "カメラ起動を再試行" : "カメラを再試行"}
         </button>
       )}
 
