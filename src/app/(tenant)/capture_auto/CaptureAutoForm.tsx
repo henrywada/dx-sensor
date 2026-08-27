@@ -21,11 +21,17 @@ type UploadStatus = "idle" | "uploading" | "done" | "error";
 
 const INTERVAL_OPTIONS_SEC = [3, 5, 10, 15, 30, 60] as const;
 const MOUNT_STORAGE_KEY = "dx-sensor.capture-auto.mount";
+const INVERT_STORAGE_KEY = "dx-sensor.capture-auto.invert-rotation";
 
 function readStoredMount(): MountOrientation {
   if (typeof window === "undefined") return "landscape";
   const stored = window.localStorage.getItem(MOUNT_STORAGE_KEY);
   return stored === "portrait" ? "portrait" : "landscape";
+}
+
+function readStoredInvert(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(INVERT_STORAGE_KEY) === "1";
 }
 
 export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
@@ -46,6 +52,7 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
   const [clearWarning, setClearWarning] = useState<string | null>(null);
   const [hintOpen, setHintOpen] = useState(false);
   const [mountOrientation, setMountOrientation] = useState<MountOrientation>("landscape");
+  const [invertRotation, setInvertRotation] = useState(false);
 
   const clearOwnAutoCaptures = useCallback(async () => {
     setClearWarning(null);
@@ -149,11 +156,16 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
 
   useEffect(() => {
     setMountOrientation(readStoredMount());
+    setInvertRotation(readStoredInvert());
   }, []);
 
   useEffect(() => {
     window.localStorage.setItem(MOUNT_STORAGE_KEY, mountOrientation);
   }, [mountOrientation]);
+
+  useEffect(() => {
+    window.localStorage.setItem(INVERT_STORAGE_KEY, invertRotation ? "1" : "0");
+  }, [invertRotation]);
 
   useEffect(() => {
     let cancelled = false;
@@ -187,7 +199,7 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
     setUploadError(null);
 
     try {
-      const canvas = captureFrameFromVideo(video, mountOrientation);
+      const canvas = captureFrameFromVideo(video, mountOrientation, invertRotation);
 
       const blob = await new Promise<Blob>((resolve, reject) => {
         canvas.toBlob(
@@ -231,7 +243,7 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
     } finally {
       uploadingRef.current = false;
     }
-  }, [supabase, tenantId, userId, mountOrientation]);
+  }, [supabase, tenantId, userId, mountOrientation, invertRotation]);
 
   // 自動撮影開始後のみ、間隔ごとに取得＆保存（開始前はプレビュー表示のみ）
   useEffect(() => {
@@ -274,7 +286,7 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
     <div className="mx-auto flex max-w-md flex-col gap-4 p-6">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
-          <h1 className="text-lg font-semibold text-ink">アプリ内撮影</h1>
+          <h1 className="text-lg font-semibold text-ink">固定撮影</h1>
           {autoRunning && (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-signal/10 px-2.5 py-0.5 text-xs font-medium text-signal">
               <span className="relative flex h-2 w-2">
@@ -311,7 +323,13 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
         </p>
       )}
 
-      <div className="overflow-hidden rounded-lg border border-line bg-black">
+      <div
+        className={`overflow-hidden rounded-lg border bg-black transition ${
+          autoRunning
+            ? "border-signal ring-2 ring-signal/50 animate-pulse"
+            : "border-line"
+        }`}
+      >
         <div className={`relative w-full bg-black ${previewAspectClass(mountOrientation)}`}>
           <video
             ref={videoRef}
@@ -369,9 +387,25 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
           onChange={(e) => setMountOrientation(e.target.value as MountOrientation)}
           className="rounded-md border border-line bg-white px-3 py-1.5 text-sm outline-none focus:border-signal focus:ring-1 focus:ring-signal disabled:opacity-50"
         >
-          <option value="landscape">横固定（ランドスケープ）</option>
-          <option value="portrait">縦固定（ポートレート）</option>
+          <option value="landscape">横置き固定（画面が横長）</option>
+          <option value="portrait">縦置き固定（画面が縦長）</option>
         </select>
+      </label>
+
+      <label className="flex items-start gap-2 text-sm text-ink">
+        <input
+          type="checkbox"
+          checked={invertRotation}
+          disabled={autoRunning}
+          onChange={(e) => setInvertRotation(e.target.checked)}
+          className="mt-0.5 accent-signal"
+        />
+        <span>
+          保存画像の向きが違うとき：回転方向を反転する
+          <span className="mt-0.5 block text-xs text-ink-soft">
+            景色が横倒し／上下逆ならオンにして撮り直してください。
+          </span>
+        </span>
       </label>
 
       <label className="flex items-center justify-between gap-3 text-sm text-ink">
@@ -391,19 +425,37 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
       </label>
 
       <div className="grid grid-cols-2 gap-3">
-        <button
-          type="button"
-          disabled={cameraState !== "ready" || autoRunning}
-          onClick={handleStart}
-          className="rounded-md bg-signal px-4 py-3 text-sm font-medium text-white transition hover:bg-signal/90 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          自動撮影開始
-        </button>
+        {autoRunning ? (
+          <div
+            role="status"
+            aria-live="polite"
+            className="flex items-center justify-center gap-2 rounded-md border-2 border-signal bg-signal/10 px-4 py-3 text-sm font-semibold text-signal"
+          >
+            <span className="relative flex h-2.5 w-2.5 shrink-0">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />
+            </span>
+            <span className="animate-pulse">撮影中</span>
+          </div>
+        ) : (
+          <button
+            type="button"
+            disabled={cameraState !== "ready"}
+            onClick={handleStart}
+            className="rounded-md bg-signal px-4 py-3 text-sm font-medium text-white transition hover:bg-signal/90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            自動撮影開始
+          </button>
+        )}
         <button
           type="button"
           disabled={!autoRunning}
           onClick={handleStop}
-          className="rounded-md bg-alert px-4 py-3 text-sm font-medium text-white transition hover:bg-alert/90 disabled:cursor-not-allowed disabled:opacity-50"
+          className={`rounded-md px-4 py-3 text-sm font-medium text-white transition disabled:cursor-not-allowed disabled:opacity-40 ${
+            autoRunning
+              ? "bg-alert shadow-[0_0_16px_rgba(220,38,38,0.45)] ring-2 ring-alert/50 animate-pulse hover:bg-alert/90"
+              : "bg-alert/70 hover:bg-alert/90"
+          }`}
         >
           停止
         </button>

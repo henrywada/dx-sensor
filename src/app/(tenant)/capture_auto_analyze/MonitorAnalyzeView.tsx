@@ -542,7 +542,7 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
       </div>
 
       <p className="mt-2 text-sm leading-relaxed text-ink-soft">
-        アプリ内撮影で蓄積した画像を、画面を開いている間だけ5秒ごとに比較し、変化をAIで解析します。
+        固定撮影で蓄積した画像を、画面を開いている間だけ5秒ごとに比較し、変化をAIで解析します。
       </p>
 
       <div className="mt-6 grid grid-cols-2 gap-2 rounded-lg border border-line bg-white p-1 sm:grid-cols-4">
@@ -1310,12 +1310,6 @@ function NaturalAspectImage({
   className?: string;
   maxHeightClassName?: string;
 }) {
-  const [aspectRatio, setAspectRatio] = useState<number | null>(null);
-
-  useEffect(() => {
-    setAspectRatio(null);
-  }, [src]);
-
   if (!src) {
     return (
       <div className={`flex min-h-32 items-center justify-center text-sm text-ink-soft ${className}`}>
@@ -1325,21 +1319,12 @@ function NaturalAspectImage({
   }
 
   return (
-    <div
-      className={`flex justify-center bg-line ${className}`}
-      style={aspectRatio ? { aspectRatio } : undefined}
-    >
+    <div className={`bg-line ${className}`}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={src}
         alt={alt}
-        className={`w-full object-contain ${maxHeightClassName}`}
-        onLoad={(event) => {
-          const img = event.currentTarget;
-          if (img.naturalWidth > 0 && img.naturalHeight > 0) {
-            setAspectRatio(img.naturalWidth / img.naturalHeight);
-          }
-        }}
+        className={`mx-auto h-auto w-full object-contain ${maxHeightClassName}`}
       />
     </div>
   );
