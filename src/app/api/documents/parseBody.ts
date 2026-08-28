@@ -1,4 +1,8 @@
-import type { DocumentTypePlugin, ImageRole } from "@/lib/documents/pluginTypes";
+import type {
+  DocumentTypePlugin,
+  ImageRole,
+  LineItemDraft,
+} from "@/lib/documents/pluginTypes";
 import { getDocumentPlugin } from "@/lib/documents/registry";
 import { isTmpPath } from "@/lib/documents/storagePaths";
 
@@ -40,6 +44,7 @@ export type ParsedCommitBody = {
   rawOcrProvided: boolean;
   analysisRunId: string | null;
   images: ParsedCommitImage[];
+  lineItems: LineItemDraft[];
 };
 
 const imageRoles = new Set<ImageRole>(["front", "back", "page"]);
@@ -86,13 +91,36 @@ function validateImages<T extends { role: ImageRole }>(
 ): T[] {
   if (
     images.length < plugin.imagePolicy.min ||
-    images.length > plugin.imagePolicy.max ||
-    !images.some((image) => image.role === "front")
+    images.length > plugin.imagePolicy.max
   ) {
-    throw new Error("invalid image count or missing front image");
+    throw new Error("invalid image count");
+  }
+
+  const allowed = new Set(plugin.imagePolicy.allowedRoles);
+  if (!images.every((image) => allowed.has(image.role))) {
+    throw new Error("invalid image role for document type");
   }
 
   return images;
+}
+
+export function parseLineItemsBody(
+  body: Record<string, unknown>,
+  plugin: DocumentTypePlugin
+): LineItemDraft[] {
+  if (!plugin.supportsLineItems) {
+    return [];
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(body, "lineItems")) {
+    throw new Error("lineItems is required");
+  }
+
+  if (!plugin.parseLineItems) {
+    throw new Error("lineItems parser is not configured");
+  }
+
+  return plugin.parseLineItems(body.lineItems);
 }
 
 function parseTags(value: unknown): string[] {
@@ -186,5 +214,6 @@ export function parseCommitBody(
     rawOcrProvided: Object.prototype.hasOwnProperty.call(body, "rawOcr"),
     analysisRunId: parseOptionalUuid(body.analysisRunId),
     images: validateImages(images, plugin),
+    lineItems: parseLineItemsBody(body, plugin),
   };
 }

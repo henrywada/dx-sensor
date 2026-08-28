@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getActiveTenant } from "@/lib/auth/getActiveTenant";
 import { getViewerContext } from "@/lib/auth/getViewerContext";
 import { canMutateDocument } from "@/lib/documents/canMutateDocument";
+import type { LineItemDraft } from "@/lib/documents/pluginTypes";
 import { getDocumentPlugin } from "@/lib/documents/registry";
 import { BUCKET } from "@/lib/documents/storagePaths";
 import { estimateCostYen, extractTokenUsage } from "@/lib/image-analysis/estimateCostYen";
@@ -107,16 +108,28 @@ export async function POST(_req: Request, { params }: RouteContext) {
   }
 
   const imageRows = (images ?? []) as ImageRow[];
-  const frontPath = imageRows.find((image) => image.role === "front")?.storage_path;
-  const backPath = imageRows.find((image) => image.role === "back")?.storage_path;
-  if (!frontPath) {
-    return NextResponse.json({ error: "文書画像が見つかりません" }, { status: 404 });
+
+  if (!plugin.structuredOcr) {
+    const frontPath = imageRows.find((image) => image.role === "front")?.storage_path;
+    if (!frontPath) {
+      return NextResponse.json({ error: "文書画像が見つかりません" }, { status: 404 });
+    }
+  } else {
+    const pageCount = imageRows.filter((image) => image.role === "page").length;
+    if (pageCount === 0) {
+      return NextResponse.json({ error: "文書画像が見つかりません" }, { status: 404 });
+    }
   }
 
   let extracted: Record<string, string>;
+  let lineItems: LineItemDraft[] | undefined;
   let rawOcr = "";
   let raw: unknown = null;
   let warning: "ocr_failed" | undefined;
+
+  if (plugin.structuredOcr) {
+    lineItems = [];
+  }
 
   try {
     const apiKey = process.env.GEMINI_API_KEY;
@@ -124,16 +137,37 @@ export async function POST(_req: Request, { params }: RouteContext) {
       throw new Error("GEMINI_API_KEY が未設定です");
     }
 
-    const result = await ocrDocument({
-      front: await downloadImage(supabase, frontPath),
-      back: backPath ? await downloadImage(supabase, backPath) : undefined,
-      plugin,
-      apiKey,
-      model: process.env.GEMINI_VISION_MODEL || "gemini-2.5-flash",
-    });
-    extracted = result.extracted;
-    rawOcr = result.rawText;
-    raw = result.raw;
+    const model = process.env.GEMINI_VISION_MODEL || "gemini-2.5-flash";
+
+    if (plugin.structuredOcr) {
+      const pageRows = imageRows.filter((image) => image.role === "page");
+      const pages = await Promise.all(
+        pageRows.map((image) => downloadImage(supabase, image.storage_path))
+      );
+      const result = await ocrDocument({
+        pages,
+        plugin,
+        apiKey,
+        model,
+      });
+      extracted = result.extracted;
+      lineItems = result.lineItems ?? [];
+      rawOcr = result.rawText;
+      raw = result.raw;
+    } else {
+      const frontPath = imageRows.find((image) => image.role === "front")!.storage_path;
+      const backPath = imageRows.find((image) => image.role === "back")?.storage_path;
+      const result = await ocrDocument({
+        front: await downloadImage(supabase, frontPath),
+        back: backPath ? await downloadImage(supabase, backPath) : undefined,
+        plugin,
+        apiKey,
+        model,
+      });
+      extracted = result.extracted;
+      rawOcr = result.rawText;
+      raw = result.raw;
+    }
   } catch (err) {
     console.error("document OCR failed", err);
     extracted = plugin.parseExtracted({});
@@ -162,6 +196,7 @@ export async function POST(_req: Request, { params }: RouteContext) {
 
   return NextResponse.json({
     extracted,
+    ...(lineItems !== undefined ? { lineItems } : {}),
     rawOcr,
     warning,
     analysisRunId: run?.id ?? null,

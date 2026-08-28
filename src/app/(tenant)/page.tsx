@@ -1,4 +1,4 @@
-import { Aperture, Bell, Contact, FolderOpen, ImagePlus, Images } from "lucide-react";
+import { Aperture, Bell, Contact, FileText, FolderOpen, ImagePlus, Images } from "lucide-react";
 import { AppCard, type AppCardProps } from "@/components/ui/AppCard";
 
 interface Category {
@@ -61,6 +61,18 @@ const categories: Category[] = [
         title: "文書ホルダーを見る",
         description: "保存した名刺を検索・編集し、必要なものを会社にも公開します。",
         href: "/documents?type=business_card",
+      },
+      {
+        icon: FileText,
+        title: "請求書を撮る",
+        description: "請求書を撮影し、AIで読み取った内容を確認して保存します。",
+        href: "/documents/new?type=invoice",
+      },
+      {
+        icon: FolderOpen,
+        title: "請求書ホルダー",
+        description: "保存した請求書を検索・編集し、CSVでエクスポートします。",
+        href: "/documents?type=invoice",
       },
     ],
   },

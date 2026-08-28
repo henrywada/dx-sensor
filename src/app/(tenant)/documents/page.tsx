@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { getActiveTenant } from "@/lib/auth/getActiveTenant";
 import { getViewerContext } from "@/lib/auth/getViewerContext";
 import { DocumentsAlbum } from "./DocumentsAlbum";
+import { InvoiceAlbum } from "./InvoiceAlbum";
 
 interface DocumentsPageProps {
   searchParams?: {
@@ -12,7 +13,6 @@ interface DocumentsPageProps {
 
 export default async function DocumentsPage({ searchParams }: DocumentsPageProps) {
   const documentType = searchParams?.type ?? "business_card";
-  if (documentType !== "business_card") notFound();
 
   const viewer = await getViewerContext();
   if (!viewer.userId) redirect("/login");
@@ -28,11 +28,25 @@ export default async function DocumentsPage({ searchParams }: DocumentsPageProps
     );
   }
 
-  return (
-    <DocumentsAlbum
-      documentType={documentType}
-      userId={viewer.userId}
-      initialOpenId={searchParams?.open ?? null}
-    />
-  );
+  if (documentType === "business_card") {
+    return (
+      <DocumentsAlbum
+        documentType={documentType}
+        userId={viewer.userId}
+        initialOpenId={searchParams?.open ?? null}
+      />
+    );
+  }
+
+  if (documentType === "invoice") {
+    return (
+      <InvoiceAlbum
+        documentType={documentType}
+        userId={viewer.userId}
+        initialOpenId={searchParams?.open ?? null}
+      />
+    );
+  }
+
+  notFound();
 }

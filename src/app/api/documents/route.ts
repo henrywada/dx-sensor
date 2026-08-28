@@ -4,11 +4,26 @@ import { getActiveTenant } from "@/lib/auth/getActiveTenant";
 import { getViewerContext } from "@/lib/auth/getViewerContext";
 import { canMutateDocument } from "@/lib/documents/canMutateDocument";
 import { findDuplicate } from "@/lib/documents/findDuplicate";
+import { lineItemDraftToDbRow } from "@/lib/documents/lineItems";
+import type { LineItemDraft } from "@/lib/documents/pluginTypes";
 import { getDocumentPlugin } from "@/lib/documents/registry";
 import { BUCKET, finalObjectPath } from "@/lib/documents/storagePaths";
 import { tokyoToday } from "@/lib/documents/tokyoDate";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { parseCommitBody, type ParsedCommitBody } from "./parseBody";
+
+async function replaceLineItems(
+  supabase: ReturnType<typeof createServerSupabase>,
+  documentId: string,
+  tenantId: string,
+  drafts: LineItemDraft[]
+) {
+  await supabase.from("captured_document_line_items").delete().eq("document_id", documentId);
+  if (drafts.length === 0) return;
+  const rows = drafts.map((d) => lineItemDraftToDbRow(d, documentId, tenantId));
+  const { error } = await supabase.from("captured_document_line_items").insert(rows);
+  if (error) throw error;
+}
 
 type DocumentRow = {
   id: string;
@@ -114,6 +129,12 @@ function parseDate(value: string | null): string | null {
   return ymdPattern.test(value) ? value : null;
 }
 
+function parseAmountFilter(value: string | null): number | null {
+  if (!value) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function buildReplacementImages({
   tenantId,
   documentId,
@@ -197,6 +218,8 @@ export async function GET(req: Request) {
   const from = parseDate(url.searchParams.get("from"));
   const to = parseDate(url.searchParams.get("to"));
   const q = parseSearch(url.searchParams.get("q"));
+  const amountMin = parseAmountFilter(url.searchParams.get("amount_min"));
+  const amountMax = parseAmountFilter(url.searchParams.get("amount_max"));
   const tags = url.searchParams
     .getAll("tag")
     .map((tag) => tag.trim())
@@ -222,9 +245,11 @@ export async function GET(req: Request) {
   }
   if (from) query = query.gte("context_date", from);
   if (to) query = query.lte("context_date", to);
+  if (amountMin !== null) query = query.gte("amount_yen", amountMin);
+  if (amountMax !== null) query = query.lte("amount_yen", amountMax);
   if (q) {
     query = query.or(
-      `title.ilike.*${q}*,counterparty.ilike.*${q}*,extracted->>email.ilike.*${q}*`
+      `title.ilike.*${q}*,counterparty.ilike.*${q}*,extracted->>email.ilike.*${q}*,extracted->>recipient_name.ilike.*${q}*`
     );
   }
 
@@ -244,11 +269,12 @@ export async function GET(req: Request) {
   const frontImages = new Map<string, string>();
 
   if (ids.length > 0) {
+    const thumbnailRole = plugin.supportsLineItems ? "page" : "front";
     const { data: images, error: imageError } = await supabase
       .from("captured_document_images")
       .select("document_id, storage_path, sort_order")
       .in("document_id", ids)
-      .eq("role", "front")
+      .eq("role", thumbnailRole)
       .order("sort_order", { ascending: true });
 
     if (imageError) {
@@ -497,6 +523,10 @@ export async function POST(req: Request) {
       if (error) {
         throw new Error(error.message);
       }
+    }
+
+    if (parsed.plugin.supportsLineItems) {
+      await replaceLineItems(supabase, savedDocumentId, tenant.tenantId, parsed.lineItems);
     }
   } catch (err) {
     console.error("captured document image replace failed", err);

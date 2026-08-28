@@ -3,6 +3,7 @@ import { getActiveTenant } from "@/lib/auth/getActiveTenant";
 import { getViewerContext } from "@/lib/auth/getViewerContext";
 import { tokyoToday } from "@/lib/documents/tokyoDate";
 import { CaptureDocumentForm } from "./CaptureDocumentForm";
+import { InvoiceCaptureForm } from "./InvoiceCaptureForm";
 
 interface NewDocumentPageProps {
   searchParams?: {
@@ -14,7 +15,7 @@ export default async function NewDocumentPage({
   searchParams,
 }: NewDocumentPageProps) {
   const documentType = searchParams?.type;
-  if (documentType !== "business_card") notFound();
+  if (documentType !== "business_card" && documentType !== "invoice") notFound();
 
   const viewer = await getViewerContext();
   if (!viewer.userId) redirect("/login");
@@ -30,12 +31,21 @@ export default async function NewDocumentPage({
     );
   }
 
+  if (documentType === "business_card") {
+    return (
+      <CaptureDocumentForm
+        tenantId={tenant.tenantId}
+        userId={viewer.userId}
+        defaultContextDate={tokyoToday()}
+        documentType={documentType}
+      />
+    );
+  }
+
   return (
-    <CaptureDocumentForm
+    <InvoiceCaptureForm
       tenantId={tenant.tenantId}
       userId={viewer.userId}
-      defaultContextDate={tokyoToday()}
-      documentType={documentType}
     />
   );
 }

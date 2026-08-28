@@ -1,4 +1,7 @@
-import type { DocumentTypePlugin } from "@/lib/documents/pluginTypes";
+import type {
+  DocumentTypePlugin,
+  LineItemDraft,
+} from "@/lib/documents/pluginTypes";
 import type { FetchImpl } from "../types";
 import { parseVisionJson } from "./parseVisionJson";
 
@@ -16,8 +19,9 @@ export interface DocumentOcrImage {
 }
 
 export interface DocumentOcrInput {
-  front: DocumentOcrImage;
+  front?: DocumentOcrImage;
   back?: DocumentOcrImage;
+  pages?: DocumentOcrImage[];
   plugin: DocumentTypePlugin;
   apiKey: string;
   model?: string;
@@ -26,6 +30,7 @@ export interface DocumentOcrInput {
 
 export interface DocumentOcrResult {
   extracted: Record<string, string>;
+  lineItems?: LineItemDraft[];
   rawText: string;
   raw: unknown;
 }
@@ -59,6 +64,16 @@ function mergeExtracted(
   return merged;
 }
 
+function collectStructuredPages(input: DocumentOcrInput): DocumentOcrImage[] {
+  if (input.pages && input.pages.length > 0) {
+    return input.pages;
+  }
+  if (input.front) {
+    return input.back ? [input.front, input.back] : [input.front];
+  }
+  return [];
+}
+
 export async function ocrDocument(
   input: DocumentOcrInput
 ): Promise<DocumentOcrResult> {
@@ -67,13 +82,24 @@ export async function ocrDocument(
   const url =
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent` +
     `?key=${encodeURIComponent(input.apiKey)}`;
-  const parts: GeminiContentPart[] = [
-    { text: input.plugin.analyzePrompt },
-    imagePart(input.front),
-  ];
+  const parts: GeminiContentPart[] = [{ text: input.plugin.analyzePrompt }];
 
-  if (input.back) {
-    parts.push(imagePart(input.back));
+  if (input.plugin.structuredOcr) {
+    const pages = collectStructuredPages(input);
+    if (pages.length === 0) {
+      throw new Error("At least one page image is required");
+    }
+    for (const page of pages) {
+      parts.push(imagePart(page));
+    }
+  } else {
+    if (!input.front) {
+      throw new Error("Front image is required");
+    }
+    parts.push(imagePart(input.front));
+    if (input.back) {
+      parts.push(imagePart(input.back));
+    }
   }
 
   const res = await fetchImpl(url, {
@@ -100,6 +126,19 @@ export async function ocrDocument(
   const parsed = parseVisionJson(rawText);
   if (parsed === null) {
     throw new Error("Gemini OCR response was not valid JSON");
+  }
+
+  if (input.plugin.structuredOcr) {
+    const parsedRecord = isRecord(parsed) ? parsed : {};
+    const extracted = input.plugin.parseExtracted(parsedRecord.header);
+    const lineItems = input.plugin.parseLineItems!(parsedRecord.line_items);
+
+    return {
+      extracted,
+      lineItems,
+      rawText,
+      raw,
+    };
   }
 
   const parsedRecord = isRecord(parsed) ? parsed : {};

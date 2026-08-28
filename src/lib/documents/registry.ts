@@ -1,8 +1,10 @@
 import type { DocumentTypePlugin } from "./pluginTypes";
 import { businessCardPlugin } from "./types/business_card/plugin";
+import { invoicePlugin } from "./types/invoice/plugin";
 
 const plugins: Record<string, DocumentTypePlugin> = {
   business_card: businessCardPlugin,
+  invoice: invoicePlugin,
 };
 
 export function getDocumentPlugin(id: string): DocumentTypePlugin | null {

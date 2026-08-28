@@ -8,6 +8,7 @@ import {
   List,
   RefreshCw,
   Search,
+  StickyNote,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -112,6 +113,21 @@ function parseTagsInput(value: string): string[] {
         .map((tag) => tag.trim())
         .filter(Boolean)
     )
+  );
+}
+
+function hasNotes(notes: string): boolean {
+  return notes.trim().length > 0;
+}
+
+function NotesIndicator({ className }: { className?: string }) {
+  return (
+    <StickyNote
+      className={className ?? "h-3.5 w-3.5 shrink-0 text-signal"}
+      strokeWidth={1.75}
+      aria-label="メモあり"
+      title="メモあり"
+    />
   );
 }
 
@@ -591,6 +607,11 @@ export function DocumentsAlbum({
                       会社
                     </span>
                   )}
+                  {hasNotes(item.notes) && (
+                    <span className="absolute right-2 top-2 rounded bg-white/90 p-1 text-signal shadow-sm">
+                      <NotesIndicator className="h-3.5 w-3.5" />
+                    </span>
+                  )}
                 </div>
                 <div className="min-w-0 space-y-1 p-2.5">
                   <p className="truncate text-sm font-semibold text-ink">
@@ -635,6 +656,7 @@ export function DocumentsAlbum({
                 <div className="min-w-0 flex-1">
                   <p className="flex items-center gap-1.5 truncate text-sm font-medium text-ink">
                     <span className="truncate">{item.title || "氏名未設定"}</span>
+                    {hasNotes(item.notes) && <NotesIndicator />}
                     {item.companyVisible && (
                       <span className="rounded bg-signal px-1.5 py-0.5 text-[10px] font-bold text-white">
                         会社

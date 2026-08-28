@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { businessCardPlugin } from "@/lib/documents/types/business_card/plugin";
+import { invoicePlugin } from "@/lib/documents/types/invoice/plugin";
 import { ocrDocument } from "./documentOcr";
 
 describe("ocrDocument", () => {
@@ -122,6 +123,43 @@ describe("ocrDocument", () => {
     expect(result.extracted.full_name).toBe("佐藤花子");
     expect(result.extracted.company).toBe("サンプル株式会社");
     expect(result.extracted.email).toBe("hanako@example.com");
+  });
+
+  it("parses structured invoice JSON with line items", async () => {
+    const plugin = invoicePlugin;
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        candidates: [
+          {
+            content: {
+              parts: [
+                {
+                  text: JSON.stringify({
+                    header: {
+                      invoice_number: "001",
+                      issuer_name: "Co",
+                      total: "1000",
+                    },
+                    line_items: [
+                      { line_no: 1, description: "Item", amount: "1000" },
+                    ],
+                  }),
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    });
+    const result = await ocrDocument({
+      pages: [{ imageBuffer: Buffer.from("x"), mimeType: "image/jpeg" }],
+      plugin,
+      apiKey: "test-key",
+      fetchImpl,
+    });
+    expect(result.extracted.invoice_number).toBe("001");
+    expect(result.lineItems).toHaveLength(1);
   });
 
   it("throws when Gemini returns invalid JSON", async () => {

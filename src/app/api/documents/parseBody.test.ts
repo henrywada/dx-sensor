@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { parseAnalyzeBody, parseCommitBody } from "./parseBody";
+import {
+  parseAnalyzeBody,
+  parseCommitBody,
+  parseLineItemsBody,
+} from "./parseBody";
 
 const tenantId = "11111111-1111-4111-8111-111111111111";
 const userId = "22222222-2222-4222-8222-222222222222";
 const frontTmpPath = `${tenantId}/tmp/${userId}/33333333-3333-4333-8333-333333333333.jpg`;
 const backTmpPath = `${tenantId}/tmp/${userId}/44444444-4444-4444-8444-444444444444.jpg`;
+const pageTmpPath = `${tenantId}/tmp/${userId}/a.jpg`;
 
 describe("parseAnalyzeBody", () => {
   it("accepts registered document types with a front tmp image", () => {
@@ -23,11 +28,22 @@ describe("parseAnalyzeBody", () => {
     });
   });
 
+  it("accepts page-only images for invoice", () => {
+    const body = parseAnalyzeBody(
+      {
+        documentType: "invoice",
+        images: [{ role: "page", path: pageTmpPath }],
+      },
+      { tenantId, userId }
+    );
+    expect(body.images[0].role).toBe("page");
+  });
+
   it("rejects an unknown document type", () => {
     expect(() =>
       parseAnalyzeBody(
         {
-          documentType: "invoice",
+          documentType: "receipt",
           images: [{ role: "front", path: frontTmpPath }],
         },
         { tenantId, userId }
@@ -35,12 +51,12 @@ describe("parseAnalyzeBody", () => {
     ).toThrow();
   });
 
-  it("rejects payloads without a front image", () => {
+  it("rejects page images for business cards", () => {
     expect(() =>
       parseAnalyzeBody(
         {
           documentType: "business_card",
-          images: [{ role: "back", path: backTmpPath }],
+          images: [{ role: "page", path: pageTmpPath }],
         },
         { tenantId, userId }
       )
@@ -99,6 +115,7 @@ describe("parseCommitBody", () => {
       rawOcrProvided: true,
       analysisRunId: "55555555-5555-4555-8555-555555555555",
       images: [{ role: "front", tmpPath: frontTmpPath }],
+      lineItems: [],
     });
   });
 
@@ -113,5 +130,83 @@ describe("parseCommitBody", () => {
         { tenantId, userId }
       )
     ).toThrow();
+  });
+
+  it("requires lineItems for invoice commits", () => {
+    expect(() =>
+      parseCommitBody(
+        {
+          documentType: "invoice",
+          companyVisible: false,
+          images: [{ role: "page", tmpPath: pageTmpPath }],
+        },
+        { tenantId, userId }
+      )
+    ).toThrow("lineItems is required");
+  });
+
+  it("accepts empty lineItems for invoice commits", () => {
+    expect(
+      parseCommitBody(
+        {
+          documentType: "invoice",
+          companyVisible: false,
+          images: [{ role: "page", tmpPath: pageTmpPath }],
+          lineItems: [],
+        },
+        { tenantId, userId }
+      )
+    ).toMatchObject({
+      documentType: "invoice",
+      images: [{ role: "page", tmpPath: pageTmpPath }],
+      lineItems: [],
+    });
+  });
+
+  it("parses invoice lineItems from the commit body", () => {
+    expect(
+      parseCommitBody(
+        {
+          documentType: "invoice",
+          companyVisible: false,
+          images: [{ role: "page", tmpPath: pageTmpPath }],
+          lineItems: [
+            {
+              line_no: 1,
+              transaction_date: "2026-08-28",
+              description: "サンプルA",
+              quantity: "1",
+              unit: "式",
+              unit_price: "10000",
+              amount: "10000",
+              tax_rate: "10",
+            },
+          ],
+        },
+        { tenantId, userId }
+      ).lineItems
+    ).toEqual([
+      {
+        line_no: 1,
+        transaction_date: "2026-08-28",
+        description: "サンプルA",
+        quantity: "1",
+        unit: "式",
+        unit_price: "10000",
+        amount: "10000",
+        tax_rate: "10",
+      },
+    ]);
+  });
+});
+
+describe("parseLineItemsBody", () => {
+  it("returns an empty array for document types without line items", () => {
+    expect(
+      parseLineItemsBody(
+        { documentType: "business_card" },
+        { id: "business_card" } as never
+      )
+    ).toEqual([]);
   });
 });

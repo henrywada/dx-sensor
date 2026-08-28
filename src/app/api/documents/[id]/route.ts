@@ -3,9 +3,24 @@ import { getActiveTenant } from "@/lib/auth/getActiveTenant";
 import { getViewerContext } from "@/lib/auth/getViewerContext";
 import { canMutateDocument } from "@/lib/documents/canMutateDocument";
 import { findDuplicate } from "@/lib/documents/findDuplicate";
+import { lineItemDraftToDbRow } from "@/lib/documents/lineItems";
+import type { LineItemDraft } from "@/lib/documents/pluginTypes";
 import { getDocumentPlugin } from "@/lib/documents/registry";
 import { BUCKET } from "@/lib/documents/storagePaths";
 import { createServerSupabase } from "@/lib/supabase/server";
+
+async function replaceLineItems(
+  supabase: ReturnType<typeof createServerSupabase>,
+  documentId: string,
+  tenantId: string,
+  drafts: LineItemDraft[]
+) {
+  await supabase.from("captured_document_line_items").delete().eq("document_id", documentId);
+  if (drafts.length === 0) return;
+  const rows = drafts.map((d) => lineItemDraftToDbRow(d, documentId, tenantId));
+  const { error } = await supabase.from("captured_document_line_items").insert(rows);
+  if (error) throw error;
+}
 
 type RouteContext = {
   params: { id: string };
@@ -43,6 +58,18 @@ type ImageRow = {
   storage_path: string;
 };
 
+type LineItemRow = {
+  id: string;
+  line_no: number;
+  transaction_date: string | null;
+  description: string;
+  quantity: string;
+  unit: string;
+  unit_price: number | null;
+  amount: number | null;
+  tax_rate: string;
+};
+
 type PatchBody = {
   companyVisible?: boolean;
   notes?: string;
@@ -57,6 +84,7 @@ type PreparedRequest = {
   supabase: ReturnType<typeof createServerSupabase>;
   row: DocumentRow;
   images: ImageRow[];
+  lineItems: LineItemRow[];
 };
 
 const uuidPattern =
@@ -181,7 +209,7 @@ async function loadDocument(
   supabase: ReturnType<typeof createServerSupabase>,
   tenantId: string,
   id: string
-): Promise<{ row: DocumentRow | null; images: ImageRow[]; error: unknown }> {
+): Promise<{ row: DocumentRow | null; images: ImageRow[]; lineItems: LineItemRow[]; error: unknown }> {
   const { data: row, error } = await supabase
     .from("captured_documents")
     .select(
@@ -192,7 +220,7 @@ async function loadDocument(
     .maybeSingle();
 
   if (error || !row) {
-    return { row: null, images: [], error };
+    return { row: null, images: [], lineItems: [], error };
   }
 
   const { data: images, error: imageError } = await supabase
@@ -201,10 +229,17 @@ async function loadDocument(
     .eq("document_id", id)
     .order("sort_order", { ascending: true });
 
+  const { data: lineItems, error: lineItemsError } = await supabase
+    .from("captured_document_line_items")
+    .select("id, line_no, transaction_date, description, quantity, unit, unit_price, amount, tax_rate")
+    .eq("document_id", id)
+    .order("line_no", { ascending: true });
+
   return {
     row: row as DocumentRow,
     images: (images ?? []) as ImageRow[],
-    error: imageError,
+    lineItems: (lineItems ?? []) as LineItemRow[],
+    error: imageError ?? lineItemsError,
   };
 }
 
@@ -212,6 +247,7 @@ async function serializeDocument(
   supabase: ReturnType<typeof createServerSupabase>,
   row: DocumentRow,
   images: ImageRow[],
+  lineItems: LineItemRow[],
   canMutateCurrent: boolean
 ) {
   return {
@@ -239,6 +275,17 @@ async function serializeDocument(
         url: await signedUrl(supabase, image.storage_path),
       }))
     ),
+    lineItems: lineItems.map((item) => ({
+      id: item.id,
+      lineNo: item.line_no,
+      transactionDate: item.transaction_date,
+      description: item.description,
+      quantity: item.quantity,
+      unit: item.unit,
+      unitPrice: item.unit_price,
+      amount: item.amount,
+      taxRate: item.tax_rate,
+    })),
   };
 }
 
@@ -291,6 +338,7 @@ async function prepareRequest(
     supabase,
     row: loaded.row,
     images: loaded.images,
+    lineItems: loaded.lineItems,
   };
 }
 
@@ -308,6 +356,7 @@ export async function GET(_req: Request, { params }: RouteContext) {
       prepared.supabase,
       prepared.row,
       prepared.images,
+      prepared.lineItems,
       canMutateCurrent
     ),
   });
@@ -326,11 +375,34 @@ export async function PATCH(req: Request, { params }: RouteContext) {
     return NextResponse.json({ error: "文書種別が不正です" }, { status: 400 });
   }
 
-  let patch: PatchBody;
+  let rawBody: unknown;
   try {
-    patch = parsePatchBody(await req.json());
+    rawBody = await req.json();
   } catch {
     return NextResponse.json({ error: "リクエストが不正です" }, { status: 400 });
+  }
+
+  let patch: PatchBody;
+  try {
+    patch = parsePatchBody(rawBody);
+  } catch {
+    return NextResponse.json({ error: "リクエストが不正です" }, { status: 400 });
+  }
+
+  let patchLineItems: LineItemDraft[] | null = null;
+  if (
+    plugin.supportsLineItems &&
+    isRecord(rawBody) &&
+    Object.prototype.hasOwnProperty.call(rawBody, "lineItems")
+  ) {
+    if (!plugin.parseLineItems) {
+      return NextResponse.json({ error: "リクエストが不正です" }, { status: 400 });
+    }
+    try {
+      patchLineItems = plugin.parseLineItems(rawBody.lineItems);
+    } catch {
+      return NextResponse.json({ error: "リクエストが不正です" }, { status: 400 });
+    }
   }
 
   const nextExtracted = patch.extracted
@@ -413,11 +485,32 @@ export async function PATCH(req: Request, { params }: RouteContext) {
     return NextResponse.json({ error: "文書の更新に失敗しました" }, { status: 500 });
   }
 
+  if (patchLineItems !== null) {
+    try {
+      await replaceLineItems(
+        prepared.supabase,
+        prepared.row.id,
+        prepared.tenant.tenantId,
+        patchLineItems
+      );
+    } catch (err) {
+      console.error("captured document line items replace failed", err);
+      return NextResponse.json({ error: "明細の保存に失敗しました" }, { status: 500 });
+    }
+  }
+
+  const { data: latestLineItems } = await prepared.supabase
+    .from("captured_document_line_items")
+    .select("id, line_no, transaction_date, description, quantity, unit, unit_price, amount, tax_rate")
+    .eq("document_id", prepared.row.id)
+    .order("line_no", { ascending: true });
+
   return NextResponse.json({
     document: await serializeDocument(
       prepared.supabase,
       updated as DocumentRow,
       prepared.images,
+      (latestLineItems ?? []) as LineItemRow[],
       true
     ),
   });

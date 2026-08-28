@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Camera, Check, RotateCcw, Save, Search } from "lucide-react";
+import { Camera, Check, Plus, Save, Search, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   applyTiltReading,
@@ -15,30 +15,28 @@ import {
 } from "@/lib/capture/captureFrameFromVideo";
 import { BUCKET, tmpObjectPath } from "@/lib/documents/storagePaths";
 import {
-  CARD_KEYS,
-  type CardKey,
-} from "@/lib/documents/types/business_card/plugin";
+  INVOICE_FIELD_LABELS,
+  INVOICE_HEADER_KEYS,
+  type InvoiceHeaderKey,
+} from "@/lib/documents/types/invoice/plugin";
+import type { LineItemDraft } from "@/lib/documents/pluginTypes";
 import { createClient } from "@/lib/supabase/client";
 
-interface CaptureDocumentFormProps {
+interface InvoiceCaptureFormProps {
   tenantId: string;
   userId: string;
-  defaultContextDate: string;
-  documentType: "business_card";
 }
 
-type CaptureSide = "front" | "back";
 type CameraState = "idle" | "starting" | "ready" | "denied" | "unsupported" | "error";
 type FlowStatus = "idle" | "uploading" | "analyzing" | "saving" | "error";
 
-type CapturedImage = {
-  role: CaptureSide;
+type CapturedPage = {
   blob: Blob;
   previewUrl: string;
 };
 
-type TmpImage = {
-  role: CaptureSide;
+type TmpPage = {
+  role: "page";
   tmpPath: string;
 };
 
@@ -55,6 +53,7 @@ type DuplicatePayload = {
 
 type AnalyzeResponse = {
   extracted?: Record<string, string>;
+  lineItems?: LineItemDraft[];
   rawOcr?: string;
   warning?: "ocr_failed";
   analysisRunId?: string | null;
@@ -62,20 +61,31 @@ type AnalyzeResponse = {
   error?: string;
 };
 
-const FIELD_LABELS: Record<CardKey, string> = {
-  full_name: "氏名",
-  company: "会社名",
-  title: "役職",
-  department: "部署",
-  address: "住所",
-  phone: "電話",
-  fax: "FAX",
-  email: "メール",
-  website: "Web",
-};
+const MAX_PAGES = 10;
 
-const emptyExtracted = (): Record<CardKey, string> =>
-  Object.fromEntries(CARD_KEYS.map((key) => [key, ""])) as Record<CardKey, string>;
+function emptyHeader(): Record<InvoiceHeaderKey, string> {
+  return Object.fromEntries(INVOICE_HEADER_KEYS.map((k) => [k, ""])) as Record<
+    InvoiceHeaderKey,
+    string
+  >;
+}
+
+function newLineItem(lineNo: number): LineItemDraft {
+  return {
+    line_no: lineNo,
+    transaction_date: null,
+    description: "",
+    quantity: "",
+    unit: "",
+    unit_price: "",
+    amount: "",
+    tax_rate: "",
+  };
+}
+
+function isValidYyyyMmDd(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
 
 function requestMotionPermission(): Promise<void> {
   try {
@@ -102,10 +112,6 @@ function parseTags(input: string): string[] {
   );
 }
 
-function roleLabel(role: CaptureSide | string): string {
-  return role === "back" ? "裏面" : "表面";
-}
-
 async function blobFromCanvas(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob(
@@ -119,17 +125,12 @@ async function blobFromCanvas(canvas: HTMLCanvasElement): Promise<Blob> {
   });
 }
 
-export function CaptureDocumentForm({
-  tenantId,
-  userId,
-  defaultContextDate,
-  documentType,
-}: CaptureDocumentFormProps) {
+export function InvoiceCaptureForm({ tenantId, userId }: InvoiceCaptureFormProps) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const tmpImagesRef = useRef<TmpImage[]>([]);
+  const tmpPagesRef = useRef<TmpPage[]>([]);
   const capturedPreviewUrlsRef = useRef<string[]>([]);
   const tiltMountRef = useRef<MountOrientation | null>(null);
   const tiltListenFromRef = useRef(0);
@@ -137,11 +138,7 @@ export function CaptureDocumentForm({
   const onDeviceOrientationRef = useRef((event: DeviceOrientationEvent) => {
     if (Date.now() < tiltListenFromRef.current) return;
     const reading = mountFromDeviceTilt(event.gamma, event.beta);
-    const next = applyTiltReading(
-      reading,
-      landscapeStreakRef.current,
-      tiltMountRef.current
-    );
+    const next = applyTiltReading(reading, landscapeStreakRef.current, tiltMountRef.current);
     landscapeStreakRef.current = next.landscapeStreak;
     tiltMountRef.current = next.tilt;
   });
@@ -150,30 +147,29 @@ export function CaptureDocumentForm({
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [flowStatus, setFlowStatus] = useState<FlowStatus>("idle");
   const [flowError, setFlowError] = useState<string | null>(null);
-  const [captureRole, setCaptureRole] = useState<CaptureSide>("front");
-  const [frontImage, setFrontImage] = useState<CapturedImage | null>(null);
-  const [backImage, setBackImage] = useState<CapturedImage | null>(null);
-  const [tmpImages, setTmpImages] = useState<TmpImage[]>([]);
+  const [pages, setPages] = useState<CapturedPage[]>([]);
+  const [tmpPages, setTmpPages] = useState<TmpPage[]>([]);
   const [confirming, setConfirming] = useState(false);
-  const [extracted, setExtracted] = useState<Record<CardKey, string>>(emptyExtracted);
+  const [extracted, setExtracted] = useState<Record<InvoiceHeaderKey, string>>(emptyHeader());
+  const [lineItems, setLineItems] = useState<LineItemDraft[]>([]);
   const [notes, setNotes] = useState("");
   const [tagsInput, setTagsInput] = useState("");
-  const [contextDate, setContextDate] = useState(defaultContextDate);
+  const [contextDate, setContextDate] = useState("");
   const [companyVisible, setCompanyVisible] = useState(false);
   const [analysisRunId, setAnalysisRunId] = useState<string | null>(null);
   const [rawOcr, setRawOcr] = useState("");
   const [ocrWarning, setOcrWarning] = useState(false);
   const [duplicate, setDuplicate] = useState<DuplicatePayload | null>(null);
-  const [activePhoto, setActivePhoto] = useState<CaptureSide>("front");
+  const [activePageIndex, setActivePageIndex] = useState(0);
 
   const readOnly = duplicate?.canMutate === false;
-  const capturedImages = [frontImage, backImage].filter(Boolean) as CapturedImage[];
   const tagChips = parseTags(tagsInput);
   const canAnalyze =
-    Boolean(frontImage) &&
-    flowStatus !== "uploading" &&
-    flowStatus !== "analyzing";
-  const canSave = confirming && !readOnly && flowStatus !== "saving" && tmpImages.length > 0;
+    pages.length > 0 && flowStatus !== "uploading" && flowStatus !== "analyzing";
+  const canSave = confirming && !readOnly && flowStatus !== "saving" && tmpPages.length > 0;
+  const busy =
+    flowStatus === "uploading" || flowStatus === "analyzing" || flowStatus === "saving";
+  const showLiveCamera = cameraState === "starting" || cameraState === "ready";
 
   const stopCamera = useCallback(() => {
     if (typeof window !== "undefined") {
@@ -189,33 +185,31 @@ export function CaptureDocumentForm({
   }, []);
 
   const removeTmpObjects = useCallback(
-    async (images: TmpImage[]) => {
-      const paths = images.map((image) => image.tmpPath);
+    async (images: TmpPage[]) => {
+      const paths = images.map((p) => p.tmpPath);
       if (paths.length === 0) return;
       const { error } = await supabase.storage.from(BUCKET).remove(paths);
       if (error) {
-        console.error("captured document tmp remove failed", error);
+        console.error("invoice tmp remove failed", error);
       }
     },
     [supabase]
   );
 
-  const clearTmpImages = useCallback(async () => {
-    const current = tmpImagesRef.current;
-    tmpImagesRef.current = [];
-    setTmpImages([]);
+  const clearTmpPages = useCallback(async () => {
+    const current = tmpPagesRef.current;
+    tmpPagesRef.current = [];
+    setTmpPages([]);
     await removeTmpObjects(current);
   }, [removeTmpObjects]);
 
   useEffect(() => {
-    tmpImagesRef.current = tmpImages;
-  }, [tmpImages]);
+    tmpPagesRef.current = tmpPages;
+  }, [tmpPages]);
 
   useEffect(() => {
-    capturedPreviewUrlsRef.current = [frontImage?.previewUrl, backImage?.previewUrl].filter(
-      Boolean
-    ) as string[];
-  }, [frontImage, backImage]);
+    capturedPreviewUrlsRef.current = pages.map((p) => p.previewUrl);
+  }, [pages]);
 
   useEffect(() => {
     return () => {
@@ -223,7 +217,7 @@ export function CaptureDocumentForm({
       for (const url of capturedPreviewUrlsRef.current) {
         URL.revokeObjectURL(url);
       }
-      void removeTmpObjects(tmpImagesRef.current);
+      void removeTmpObjects(tmpPagesRef.current);
     };
   }, [removeTmpObjects, stopCamera]);
 
@@ -283,25 +277,9 @@ export function CaptureDocumentForm({
     }
   }, [stopCamera]);
 
-  const setCapturedImage = useCallback(
-    (role: CaptureSide, image: CapturedImage) => {
-      if (role === "front") {
-        if (frontImage) URL.revokeObjectURL(frontImage.previewUrl);
-        setFrontImage(image);
-        setActivePhoto("front");
-      } else {
-        if (backImage) URL.revokeObjectURL(backImage.previewUrl);
-        setBackImage(image);
-        setActivePhoto("back");
-      }
-    },
-    [backImage, frontImage]
-  );
-
   async function handleShutter() {
     const video = videoRef.current;
     if (!video || cameraState !== "ready") return;
-
     if (!video.videoWidth || !video.videoHeight) {
       setFlowError("映像の準備ができていません。少し待ってから再度お試しください。");
       return;
@@ -317,39 +295,39 @@ export function CaptureDocumentForm({
           typeof screen !== "undefined" ? screen.orientation?.type ?? "" : "",
         deviceTiltMount: tiltMountRef.current,
       });
-      const screenAngle =
-        mount === "landscape" ? LANDSCAPE_LEFT_TILT_SCREEN_ANGLE : rawAngle;
+      const screenAngle = mount === "landscape" ? LANDSCAPE_LEFT_TILT_SCREEN_ANGLE : rawAngle;
       const canvas = captureFrameFromVideo(video, mount, false, screenAngle);
       const blob = await blobFromCanvas(canvas);
-      setCapturedImage(captureRole, {
-        role: captureRole,
-        blob,
-        previewUrl: URL.createObjectURL(blob),
-      });
+      const previewUrl = URL.createObjectURL(blob);
+
+      setPages((current) => [...current, { blob, previewUrl }]);
       stopCamera();
       setCameraState("idle");
-      if (captureRole === "front") setCaptureRole("back");
     } catch (err) {
       setFlowError(err instanceof Error ? err.message : "画像の生成に失敗しました。");
     }
   }
 
-  async function uploadTmpImages(): Promise<TmpImage[]> {
-    if (!frontImage) throw new Error("表面を撮影してください。");
-    const images = [frontImage, backImage].filter(Boolean) as CapturedImage[];
-    const uploaded: TmpImage[] = [];
+  function handleDeletePage(index: number) {
+    setPages((current) => {
+      const removed = current[index];
+      if (removed) URL.revokeObjectURL(removed.previewUrl);
+      return current.filter((_, i) => i !== index);
+    });
+    setActivePageIndex((current) => Math.max(0, Math.min(current, pages.length - 2)));
+  }
 
+  async function uploadTmpPages(): Promise<TmpPage[]> {
+    if (pages.length === 0) throw new Error("ページが撮影されていません。");
+    const uploaded: TmpPage[] = [];
     try {
-      for (const image of images) {
+      for (const page of pages) {
         const path = tmpObjectPath(tenantId, userId, crypto.randomUUID());
         const { error } = await supabase.storage
           .from(BUCKET)
-          .upload(path, image.blob, { contentType: "image/jpeg" });
+          .upload(path, page.blob, { contentType: "image/jpeg" });
         if (error) throw error;
-        uploaded.push({
-          role: image.role,
-          tmpPath: path,
-        });
+        uploaded.push({ role: "page", tmpPath: path });
       }
       return uploaded;
     } catch (err) {
@@ -364,24 +342,21 @@ export function CaptureDocumentForm({
     setDuplicate(null);
     setAnalysisRunId(null);
     setRawOcr("");
-    await clearTmpImages();
+    await clearTmpPages();
 
     try {
       setFlowStatus("uploading");
-      const uploaded = await uploadTmpImages();
-      tmpImagesRef.current = uploaded;
-      setTmpImages(uploaded);
+      const uploaded = await uploadTmpPages();
+      tmpPagesRef.current = uploaded;
+      setTmpPages(uploaded);
 
       setFlowStatus("analyzing");
       const response = await fetch("/api/documents/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          documentType,
-          images: uploaded.map((image) => ({
-            role: image.role,
-            path: image.tmpPath,
-          })),
+          documentType: "invoice",
+          images: uploaded.map((p) => ({ role: p.role, path: p.tmpPath })),
         }),
       });
       const result = (await response.json().catch(() => ({}))) as AnalyzeResponse;
@@ -389,38 +364,49 @@ export function CaptureDocumentForm({
         throw new Error(result.error ?? "解析に失敗しました。");
       }
 
-      const nextExtracted = emptyExtracted();
-      for (const key of CARD_KEYS) {
+      const nextExtracted = emptyHeader();
+      for (const key of INVOICE_HEADER_KEYS) {
         nextExtracted[key] = result.extracted?.[key] ?? "";
       }
+
       const duplicateSeed = result.duplicate?.canMutate ? result.duplicate : null;
       if (duplicateSeed?.extracted) {
-        for (const key of CARD_KEYS) {
-          nextExtracted[key] = duplicateSeed.extracted[key] ?? "";
+        for (const key of INVOICE_HEADER_KEYS) {
+          nextExtracted[key] = duplicateSeed.extracted[key] ?? nextExtracted[key];
         }
       }
+
+      const issueDate = nextExtracted.issue_date;
+      const initialContextDate =
+        duplicateSeed?.contextDate != null
+          ? duplicateSeed.contextDate
+          : isValidYyyyMmDd(issueDate)
+            ? issueDate
+            : "";
+
       setExtracted(nextExtracted);
+      setLineItems(result.lineItems ?? []);
       setNotes(duplicateSeed?.notes ?? "");
       setTagsInput(duplicateSeed?.tags?.join(", ") ?? "");
-      setContextDate(duplicateSeed ? duplicateSeed.contextDate ?? "" : defaultContextDate);
+      setContextDate(initialContextDate);
       setCompanyVisible(duplicateSeed?.companyVisible ?? false);
       setAnalysisRunId(result.analysisRunId ?? null);
       setRawOcr(result.rawOcr ?? "");
       setOcrWarning(result.warning === "ocr_failed");
       setDuplicate(result.duplicate ?? null);
       setConfirming(true);
-      setActivePhoto("front");
+      setActivePageIndex(0);
       setFlowStatus("idle");
     } catch (err) {
-      console.error("document analyze failed", err);
-      await clearTmpImages();
+      console.error("invoice analyze failed", err);
+      await clearTmpPages();
       setFlowStatus("error");
       setFlowError(err instanceof Error ? err.message : "解析に失敗しました。");
     }
   }
 
   async function handleBackToCapture() {
-    await clearTmpImages();
+    await clearTmpPages();
     setConfirming(false);
     setFlowStatus("idle");
     setFlowError(null);
@@ -436,11 +422,16 @@ export function CaptureDocumentForm({
     setFlowError(null);
 
     try {
+      const normalizedLineItems = lineItems.map((item, index) => ({
+        ...item,
+        line_no: index + 1,
+      }));
+
       const response = await fetch("/api/documents", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          documentType,
+          documentType: "invoice",
           existingId: duplicate?.canMutate ? duplicate.id : null,
           companyVisible,
           notes,
@@ -449,10 +440,8 @@ export function CaptureDocumentForm({
           extracted,
           rawOcr,
           analysisRunId,
-          images: tmpImages.map((image) => ({
-            role: image.role,
-            tmpPath: image.tmpPath,
-          })),
+          lineItems: normalizedLineItems,
+          images: tmpPages.map((p) => ({ role: p.role, tmpPath: p.tmpPath })),
         }),
       });
       const result = (await response.json().catch(() => ({}))) as {
@@ -471,51 +460,41 @@ export function CaptureDocumentForm({
         throw new Error(result.error ?? "保存に失敗しました。");
       }
 
-      tmpImagesRef.current = [];
-      setTmpImages([]);
-      router.push("/documents?type=business_card");
+      tmpPagesRef.current = [];
+      setTmpPages([]);
+      router.push("/documents?type=invoice");
     } catch (err) {
-      console.error("document save failed", err);
+      console.error("invoice save failed", err);
       setFlowStatus("error");
       setFlowError(err instanceof Error ? err.message : "保存に失敗しました。");
     }
   }
 
-  function resetCaptured(role: CaptureSide) {
-    const image = role === "front" ? frontImage : backImage;
-    if (image) URL.revokeObjectURL(image.previewUrl);
-    if (role === "front") {
-      if (backImage) URL.revokeObjectURL(backImage.previewUrl);
-      setFrontImage(null);
-      setBackImage(null);
-      setCaptureRole("front");
-      setActivePhoto("front");
-    } else {
-      setBackImage(null);
-      setCaptureRole("back");
-      setActivePhoto("front");
-    }
-    setConfirming(false);
-    setFlowError(null);
-    setRawOcr("");
+  function addLineItem() {
+    setLineItems((current) => [...current, newLineItem(current.length + 1)]);
   }
 
-  const activeCapturedPhoto =
-    activePhoto === "back" ? backImage ?? frontImage : frontImage ?? backImage;
-  const busy =
-    flowStatus === "uploading" ||
-    flowStatus === "analyzing" ||
-    flowStatus === "saving";
-  const showLiveCamera = cameraState === "starting" || cameraState === "ready";
-  const currentPreviewImage = captureRole === "front" ? frontImage : backImage;
+  function removeLineItem(index: number) {
+    setLineItems((current) => current.filter((_, i) => i !== index));
+  }
+
+  function updateLineItem(
+    index: number,
+    field: keyof LineItemDraft,
+    value: string | null
+  ) {
+    setLineItems((current) =>
+      current.map((item, i) => (i === index ? { ...item, [field]: value } : item))
+    );
+  }
 
   if (confirming) {
     return (
       <div className="mx-auto flex max-w-md flex-col gap-5 bg-paper p-6 pb-12 text-ink">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-medium text-signal">名刺キャプチャ</p>
-            <h1 className="text-lg font-semibold text-ink">確認して保存</h1>
+            <p className="text-xs font-medium text-signal">文書ホルダー</p>
+            <h1 className="text-lg font-semibold text-ink">請求書を確認・保存</h1>
           </div>
           <button
             type="button"
@@ -542,7 +521,7 @@ export function CaptureDocumentForm({
             </p>
             {!duplicate.canMutate && (
               <Link
-                href={`/documents?type=business_card&open=${duplicate.id}`}
+                href={`/documents?type=invoice&open=${duplicate.id}`}
                 className="mt-2 inline-flex font-medium text-signal transition-colors hover:text-ink"
               >
                 ホルダーで開く
@@ -551,30 +530,33 @@ export function CaptureDocumentForm({
           </div>
         )}
 
+        {/* Page preview with tab switcher */}
         <section className="space-y-3">
-          <div className="flex gap-2">
-            {capturedImages.map((image) => (
-              <button
-                key={image.role}
-                type="button"
-                onClick={() => setActivePhoto(image.role)}
-                className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                  activePhoto === image.role
-                    ? "border-signal bg-signal text-white"
-                    : "border-line bg-white text-ink hover:border-signal/50"
-                }`}
-              >
-                今回の{roleLabel(image.role)}
-              </button>
-            ))}
-          </div>
+          {pages.length > 1 && (
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {pages.map((_, index) => (
+                <button
+                  key={index}
+                  type="button"
+                  onClick={() => setActivePageIndex(index)}
+                  className={`shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition ${
+                    activePageIndex === index
+                      ? "border-signal bg-signal text-white"
+                      : "border-line bg-white text-ink hover:border-signal/50"
+                  }`}
+                >
+                  P{index + 1}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="overflow-hidden rounded-lg border border-line bg-black">
             <div className="aspect-3/4 w-full bg-black">
-              {activeCapturedPhoto && (
+              {pages[activePageIndex] && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={activeCapturedPhoto.previewUrl}
-                  alt={`${roleLabel(activeCapturedPhoto.role)}プレビュー`}
+                  src={pages[activePageIndex]!.previewUrl}
+                  alt={`ページ ${activePageIndex + 1} プレビュー`}
                   className="h-full w-full object-contain"
                 />
               )}
@@ -582,44 +564,19 @@ export function CaptureDocumentForm({
           </div>
         </section>
 
-        {duplicate?.images?.some((image) => image.url) && (
-          <section className="space-y-2 rounded-lg border border-line bg-white p-3">
-            <h2 className="text-sm font-bold text-ink">既存の写真</h2>
-            <div className="grid grid-cols-2 gap-2">
-              {duplicate.images.map((image, index) =>
-                image.url ? (
-                  <div
-                    key={`${image.role}-${index}`}
-                    className="overflow-hidden rounded-md border border-line bg-black"
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={image.url}
-                      alt={`既存の${roleLabel(image.role)}`}
-                      className="aspect-3/4 h-full w-full object-contain"
-                    />
-                  </div>
-                ) : null
-              )}
-            </div>
-          </section>
-        )}
-
+        {/* 16-field header form */}
         <section className="space-y-3 rounded-lg border border-line bg-white p-4">
-          <h2 className="text-sm font-bold text-ink">OCR項目</h2>
-          {CARD_KEYS.map((key) => (
+          <h2 className="text-sm font-bold text-ink">ヘッダー項目</h2>
+          {INVOICE_HEADER_KEYS.map((key) => (
             <label key={key} className="block space-y-1.5">
               <span className="text-xs font-medium text-ink-soft">
-                {FIELD_LABELS[key]}
+                {INVOICE_FIELD_LABELS[key]}
               </span>
               <input
-                type={key === "email" ? "email" : "text"}
+                type="text"
                 value={extracted[key]}
                 onChange={(event) =>
-                  setExtracted((current) => ({
-                    ...current,
-                    [key]: event.target.value,
-                  }))
+                  setExtracted((current) => ({ ...current, [key]: event.target.value }))
                 }
                 disabled={readOnly || busy}
                 className="w-full rounded-md border border-line bg-paper px-3 py-2 text-sm text-ink outline-none focus:border-signal focus:ring-1 focus:ring-signal disabled:opacity-60"
@@ -628,6 +585,141 @@ export function CaptureDocumentForm({
           ))}
         </section>
 
+        {/* Editable line items table */}
+        <section className="space-y-3 rounded-lg border border-line bg-white p-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold text-ink">明細</h2>
+            {!readOnly && !busy && (
+              <button
+                type="button"
+                onClick={addLineItem}
+                className="inline-flex items-center gap-1 text-xs font-medium text-signal hover:text-ink"
+              >
+                <Plus className="h-3.5 w-3.5" strokeWidth={2} />
+                行を追加
+              </button>
+            )}
+          </div>
+
+          {lineItems.length === 0 ? (
+            <p className="text-xs text-ink-soft">明細はありません。</p>
+          ) : (
+            <div className="space-y-3">
+              {lineItems.map((item, index) => (
+                <div key={index} className="rounded-md border border-line bg-paper p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-xs font-semibold text-ink-soft">#{index + 1}</span>
+                    {!readOnly && !busy && (
+                      <button
+                        type="button"
+                        onClick={() => removeLineItem(index)}
+                        className="text-alert hover:text-alert/70"
+                        aria-label={`明細 ${index + 1} を削除`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="col-span-2 block space-y-1">
+                      <span className="text-xs text-ink-soft">品名</span>
+                      <input
+                        type="text"
+                        value={item.description}
+                        onChange={(e) => updateLineItem(index, "description", e.target.value)}
+                        disabled={readOnly || busy}
+                        className="w-full rounded border border-line bg-white px-2 py-1 text-xs outline-none focus:border-signal disabled:opacity-60"
+                      />
+                    </label>
+                    <label className="block space-y-1">
+                      <span className="text-xs text-ink-soft">明細日付</span>
+                      <input
+                        type="text"
+                        value={item.transaction_date ?? ""}
+                        onChange={(e) =>
+                          updateLineItem(
+                            index,
+                            "transaction_date",
+                            e.target.value || null
+                          )
+                        }
+                        disabled={readOnly || busy}
+                        placeholder="YYYY-MM-DD"
+                        className="w-full rounded border border-line bg-white px-2 py-1 text-xs outline-none focus:border-signal disabled:opacity-60"
+                      />
+                    </label>
+                    <label className="block space-y-1">
+                      <span className="text-xs text-ink-soft">税率</span>
+                      <select
+                        value={item.tax_rate}
+                        onChange={(e) => updateLineItem(index, "tax_rate", e.target.value)}
+                        disabled={readOnly || busy}
+                        className="w-full rounded border border-line bg-white px-2 py-1 text-xs outline-none focus:border-signal disabled:opacity-60"
+                      >
+                        <option value="">不明</option>
+                        <option value="10">10%</option>
+                        <option value="8">8%（軽減）</option>
+                      </select>
+                    </label>
+                    <label className="block space-y-1">
+                      <span className="text-xs text-ink-soft">数量</span>
+                      <input
+                        type="text"
+                        value={item.quantity}
+                        onChange={(e) => updateLineItem(index, "quantity", e.target.value)}
+                        disabled={readOnly || busy}
+                        className="w-full rounded border border-line bg-white px-2 py-1 text-xs outline-none focus:border-signal disabled:opacity-60"
+                      />
+                    </label>
+                    <label className="block space-y-1">
+                      <span className="text-xs text-ink-soft">単位</span>
+                      <input
+                        type="text"
+                        value={item.unit}
+                        onChange={(e) => updateLineItem(index, "unit", e.target.value)}
+                        disabled={readOnly || busy}
+                        className="w-full rounded border border-line bg-white px-2 py-1 text-xs outline-none focus:border-signal disabled:opacity-60"
+                      />
+                    </label>
+                    <label className="block space-y-1">
+                      <span className="text-xs text-ink-soft">単価</span>
+                      <input
+                        type="text"
+                        value={item.unit_price}
+                        onChange={(e) => updateLineItem(index, "unit_price", e.target.value)}
+                        disabled={readOnly || busy}
+                        className="w-full rounded border border-line bg-white px-2 py-1 text-xs outline-none focus:border-signal disabled:opacity-60"
+                      />
+                    </label>
+                    <label className="block space-y-1">
+                      <span className="text-xs text-ink-soft">金額</span>
+                      <input
+                        type="text"
+                        value={item.amount}
+                        onChange={(e) => updateLineItem(index, "amount", e.target.value)}
+                        disabled={readOnly || busy}
+                        className="w-full rounded border border-line bg-white px-2 py-1 text-xs outline-none focus:border-signal disabled:opacity-60"
+                      />
+                    </label>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {!readOnly && !busy && (
+            <button
+              type="button"
+              onClick={addLineItem}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-signal/40 px-4 py-2 text-sm text-signal transition hover:bg-signal/5"
+            >
+              <Plus className="h-4 w-4" strokeWidth={1.75} />
+              明細行を追加
+            </button>
+          )}
+        </section>
+
+        {/* Notes, tags, contextDate, companyVisible */}
         <section className="space-y-3 rounded-lg border border-line bg-white p-4">
           <label className="block space-y-1.5">
             <span className="text-sm font-medium text-ink">メモ</span>
@@ -646,7 +738,7 @@ export function CaptureDocumentForm({
               type="text"
               value={tagsInput}
               onChange={(event) => setTagsInput(event.target.value)}
-              placeholder="例: 展示会, 営業"
+              placeholder="例: 仕入, 経費"
               disabled={readOnly || busy}
               className="w-full rounded-md border border-line bg-paper px-3 py-2 text-sm outline-none focus:border-signal focus:ring-1 focus:ring-signal disabled:opacity-60"
             />
@@ -665,7 +757,7 @@ export function CaptureDocumentForm({
           )}
 
           <label className="block space-y-1.5">
-            <span className="text-sm font-medium text-ink">会った日</span>
+            <span className="text-sm font-medium text-ink">取引日</span>
             <input
               type="date"
               value={contextDate}
@@ -688,9 +780,7 @@ export function CaptureDocumentForm({
         </section>
 
         {flowError && (
-          <p className="rounded-md bg-alert/10 px-3 py-2 text-sm text-alert">
-            {flowError}
-          </p>
+          <p className="rounded-md bg-alert/10 px-3 py-2 text-sm text-alert">{flowError}</p>
         )}
 
         <button
@@ -710,16 +800,17 @@ export function CaptureDocumentForm({
     );
   }
 
+  // Capture phase
   return (
     <div className="mx-auto flex max-w-md flex-col gap-5 bg-paper p-6 pb-12 text-ink">
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-xs font-medium text-signal">文書ホルダー</p>
-          <h1 className="text-lg font-semibold text-ink">名刺を撮る</h1>
+          <h1 className="text-lg font-semibold text-ink">請求書を撮る</h1>
         </div>
         <div className="flex shrink-0 items-center gap-3 text-sm">
           <Link
-            href="/documents?type=business_card"
+            href="/documents?type=invoice"
             className="font-medium text-signal transition-colors hover:text-ink"
           >
             ホルダー
@@ -730,68 +821,28 @@ export function CaptureDocumentForm({
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 text-xs">
-        <div className="rounded-md border border-signal bg-signal px-2 py-2 text-center font-medium text-white">
-          1. 表
-        </div>
-        <div
-          className={`rounded-md border px-2 py-2 text-center font-medium ${
-            frontImage
-              ? "border-signal bg-signal text-white"
-              : "border-line bg-white text-ink-soft"
-          }`}
-        >
-          2. 裏
-        </div>
-        <div className="rounded-md border border-line bg-white px-2 py-2 text-center font-medium text-ink-soft">
-          3. 確認
-        </div>
-      </div>
-
+      {/* Camera section */}
       <section className="space-y-3 rounded-lg border border-line bg-white p-4">
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <h2 className="text-sm font-bold text-ink">
-              {roleLabel(captureRole)}を撮影
-            </h2>
-            <p className="mt-1 text-xs text-ink-soft">
-              表面は必須、裏面は任意です。
-            </p>
-          </div>
-          {frontImage && captureRole === "back" && (
-            <button
-              type="button"
-              onClick={() => setCaptureRole("front")}
-              className="text-xs font-medium text-signal hover:text-ink"
-            >
-              表を撮り直す
-            </button>
-          )}
+        <div>
+          <h2 className="text-sm font-bold text-ink">
+            {pages.length === 0 ? "1ページ目を撮影" : `${pages.length + 1}ページ目を撮影`}
+          </h2>
+          <p className="mt-1 text-xs text-ink-soft">最大{MAX_PAGES}ページまで撮影できます。</p>
         </div>
 
-        {(showLiveCamera || currentPreviewImage) && (
+        {showLiveCamera && (
           <div className="overflow-hidden rounded-lg border border-line bg-black">
             <div className="relative aspect-3/4 w-full bg-black">
-              {showLiveCamera && (
-                <video
-                  ref={videoRef}
-                  playsInline
-                  muted
-                  autoPlay
-                  className={`h-full w-full object-cover ${
-                    cameraState === "ready" ? "opacity-100" : "opacity-0"
-                  }`}
-                />
-              )}
-              {!showLiveCamera && currentPreviewImage && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={currentPreviewImage.previewUrl}
-                  alt={`${roleLabel(captureRole)}プレビュー`}
-                  className="h-full w-full object-contain"
-                />
-              )}
-              {showLiveCamera && cameraState === "starting" && (
+              <video
+                ref={videoRef}
+                playsInline
+                muted
+                autoPlay
+                className={`h-full w-full object-cover ${
+                  cameraState === "ready" ? "opacity-100" : "opacity-0"
+                }`}
+              />
+              {cameraState === "starting" && (
                 <div className="absolute inset-0 flex items-center justify-center px-4 text-center">
                   <p className="text-sm text-white/90">カメラを起動しています...</p>
                 </div>
@@ -801,15 +852,17 @@ export function CaptureDocumentForm({
         )}
 
         <div className="space-y-2">
-          <button
-            type="button"
-            onClick={() => void startCamera()}
-            disabled={cameraState === "starting" || busy}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-line bg-paper px-4 py-3 text-sm font-medium text-ink transition hover:border-signal/50 disabled:opacity-50"
-          >
-            <Camera className="h-4 w-4 text-signal" strokeWidth={1.75} />
-            {cameraState === "starting" ? "カメラ起動中..." : `${roleLabel(captureRole)}を撮る`}
-          </button>
+          {!showLiveCamera && (
+            <button
+              type="button"
+              onClick={() => void startCamera()}
+              disabled={busy || pages.length >= MAX_PAGES}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-line bg-paper px-4 py-3 text-sm font-medium text-ink transition hover:border-signal/50 disabled:opacity-50"
+            >
+              <Camera className="h-4 w-4 text-signal" strokeWidth={1.75} />
+              {pages.length === 0 ? "カメラを起動する" : "次のページを撮る"}
+            </button>
+          )}
 
           {cameraState === "ready" && (
             <button
@@ -821,67 +874,80 @@ export function CaptureDocumentForm({
             </button>
           )}
 
+          {showLiveCamera && (
+            <button
+              type="button"
+              onClick={() => {
+                stopCamera();
+                setCameraState("idle");
+              }}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-line bg-paper px-4 py-2 text-sm text-ink transition hover:border-signal/50"
+            >
+              キャンセル
+            </button>
+          )}
+
           {(cameraState === "denied" ||
             cameraState === "unsupported" ||
             cameraState === "error") &&
             cameraError && (
-              <p className="rounded-md bg-alert/10 px-3 py-2 text-sm text-alert">
-                {cameraError}
-              </p>
+              <p className="rounded-md bg-alert/10 px-3 py-2 text-sm text-alert">{cameraError}</p>
             )}
-
-          {(captureRole === "front" ? frontImage : backImage) && (
-            <button
-              type="button"
-              onClick={() => resetCaptured(captureRole)}
-              disabled={busy}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-line bg-paper px-4 py-2 text-sm text-ink transition hover:border-signal/50 disabled:opacity-50"
-            >
-              <RotateCcw className="h-4 w-4" strokeWidth={1.75} />
-              撮り直す
-            </button>
-          )}
         </div>
       </section>
 
-      {frontImage && (
+      {/* Thumbnail strip */}
+      {pages.length > 0 && (
         <section className="space-y-3 rounded-lg border border-line bg-white p-4">
-          <h2 className="text-sm font-bold text-ink">撮影済み</h2>
-          <div className="grid grid-cols-2 gap-3">
-            {[frontImage, backImage].filter(Boolean).map((image) => (
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold text-ink">
+              撮影済み（{pages.length}ページ）
+            </h2>
+            {pages.length < MAX_PAGES && cameraState === "idle" && (
               <button
-                key={image!.role}
                 type="button"
-                onClick={() => {
-                  setCaptureRole(image!.role);
-                  setActivePhoto(image!.role);
-                }}
-                className="overflow-hidden rounded-md border border-line bg-black text-left"
+                onClick={() => void startCamera()}
+                disabled={busy}
+                className="inline-flex items-center gap-1 text-xs font-medium text-signal hover:text-ink disabled:opacity-50"
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={image!.previewUrl}
-                  alt={`${roleLabel(image!.role)}プレビュー`}
-                  className="aspect-3/4 w-full object-contain"
-                />
-                <span className="block bg-white px-2 py-1 text-xs font-medium text-ink">
-                  {roleLabel(image!.role)}
-                </span>
+                <Plus className="h-3.5 w-3.5" strokeWidth={2} />
+                ページを追加
               </button>
+            )}
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {pages.map((page, index) => (
+              <div key={index} className="relative w-20 shrink-0">
+                <div className="overflow-hidden rounded-md border border-line bg-black">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={page.previewUrl}
+                    alt={`ページ ${index + 1}`}
+                    className="aspect-3/4 w-full object-contain"
+                  />
+                </div>
+                <span className="block bg-white px-1 py-0.5 text-center text-xs font-medium text-ink">
+                  P{index + 1}
+                </span>
+                {pages.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => handleDeletePage(index)}
+                    disabled={busy}
+                    className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-alert text-white shadow disabled:opacity-50"
+                    aria-label={`P${index + 1}を削除`}
+                  >
+                    <Trash2 className="h-3 w-3" strokeWidth={2} />
+                  </button>
+                )}
+              </div>
             ))}
           </div>
-          {captureRole === "back" && !backImage && (
-            <p className="text-xs text-ink-soft">
-              裏面が不要な場合は、このまま解析に進めます。
-            </p>
-          )}
         </section>
       )}
 
       {flowError && (
-        <p className="rounded-md bg-alert/10 px-3 py-2 text-sm text-alert">
-          {flowError}
-        </p>
+        <p className="rounded-md bg-alert/10 px-3 py-2 text-sm text-alert">{flowError}</p>
       )}
 
       <button
@@ -899,9 +965,7 @@ export function CaptureDocumentForm({
           ? "アップロード中..."
           : flowStatus === "analyzing"
             ? "解析中..."
-            : backImage
-              ? "解析して確認へ"
-              : "裏面をスキップして確認へ"}
+            : "読み取る"}
       </button>
     </div>
   );
