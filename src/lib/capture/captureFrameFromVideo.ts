@@ -3,6 +3,9 @@ export type MountOrientation = "portrait" | "landscape";
 /** Clockwise degrees applied when saving a frame. */
 export type CaptureRotationDeg = 0 | 90 | 180 | 270;
 
+/** Landscape handheld assumes the phone is tilted 90° left (CCW from portrait). */
+export const LANDSCAPE_LEFT_TILT_SCREEN_ANGLE = 270;
+
 export function readScreenAngle(): number {
   if (typeof screen !== "undefined" && screen.orientation?.angle != null) {
     return screen.orientation.angle;
@@ -11,6 +14,15 @@ export function readScreenAngle(): number {
     return window.orientation;
   }
   return 0;
+}
+
+export function detectHandheldMount(
+  screenAngle: number,
+  viewportIsLandscape: boolean
+): MountOrientation {
+  const normalized = ((screenAngle % 360) + 360) % 360;
+  if (normalized === 90 || normalized === 270) return "landscape";
+  return viewportIsLandscape ? "landscape" : "portrait";
 }
 
 /**
@@ -59,7 +71,8 @@ export function computeCaptureRotationDeg(
 export function captureFrameFromVideo(
   video: HTMLVideoElement,
   mount: MountOrientation,
-  invertDirection = false
+  invertDirection = false,
+  screenAngle = readScreenAngle()
 ): HTMLCanvasElement {
   const videoWidth = video.videoWidth;
   const videoHeight = video.videoHeight;
@@ -67,7 +80,7 @@ export function captureFrameFromVideo(
     mount,
     videoWidth,
     videoHeight,
-    readScreenAngle(),
+    screenAngle,
     invertDirection
   );
 
@@ -87,6 +100,17 @@ export function captureFrameFromVideo(
   ctx.drawImage(video, -videoWidth / 2, -videoHeight / 2, videoWidth, videoHeight);
 
   return canvas;
+}
+
+/** Handheld shutter: landscape always bakes as a left 90° phone tilt. */
+export function captureHandheldFrame(video: HTMLVideoElement): HTMLCanvasElement {
+  const viewportIsLandscape =
+    typeof window !== "undefined" && window.innerWidth > window.innerHeight;
+  const rawAngle = readScreenAngle();
+  const mount = detectHandheldMount(rawAngle, viewportIsLandscape);
+  const screenAngle =
+    mount === "landscape" ? LANDSCAPE_LEFT_TILT_SCREEN_ANGLE : rawAngle;
+  return captureFrameFromVideo(video, mount, false, screenAngle);
 }
 
 /** Preview box is always portrait; mount only affects save-time rotation. */

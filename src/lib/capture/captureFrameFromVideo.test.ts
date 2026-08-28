@@ -1,5 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { computeCaptureRotationDeg } from "./captureFrameFromVideo";
+import {
+  LANDSCAPE_LEFT_TILT_SCREEN_ANGLE,
+  computeCaptureRotationDeg,
+  detectHandheldMount,
+} from "./captureFrameFromVideo";
+
+describe("detectHandheldMount", () => {
+  it("treats 90 and 270 as landscape even if the viewport is still portrait", () => {
+    expect(detectHandheldMount(90, false)).toBe("landscape");
+    expect(detectHandheldMount(270, false)).toBe("landscape");
+    expect(detectHandheldMount(-90, false)).toBe("landscape");
+  });
+
+  it("falls back to viewport when the screen angle is upright", () => {
+    expect(detectHandheldMount(0, false)).toBe("portrait");
+    expect(detectHandheldMount(0, true)).toBe("landscape");
+    expect(detectHandheldMount(180, false)).toBe("portrait");
+  });
+});
 
 describe("computeCaptureRotationDeg", () => {
   it("keeps portrait stream as-is for upright mount", () => {
@@ -17,6 +35,13 @@ describe("computeCaptureRotationDeg", () => {
 
   it("uses 90° when device reports right tilt (angle 90)", () => {
     expect(computeCaptureRotationDeg("landscape", 1080, 1920, 90)).toBe(90);
+  });
+
+  it("handheld landscape always bakes left-tilt even if the device reports 90", () => {
+    const mount = detectHandheldMount(90, false);
+    expect(
+      computeCaptureRotationDeg(mount, 1080, 1920, LANDSCAPE_LEFT_TILT_SCREEN_ANGLE)
+    ).toBe(270);
   });
 
   it("rotates landscape stream to portrait for upright mount", () => {

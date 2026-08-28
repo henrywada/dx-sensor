@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Camera, Send, Tag } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { captureHandheldFrame } from "@/lib/capture/captureFrameFromVideo";
 import {
   SubjectManageModal,
   type PictureSendSubject,
@@ -226,16 +227,13 @@ export function SendPictureForm({ userId, userEmail }: SendPictureFormProps) {
       return;
     }
 
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) {
-      setSendError("画像の生成に失敗しました。");
+    let canvas: HTMLCanvasElement;
+    try {
+      canvas = captureHandheldFrame(video);
+    } catch (err) {
+      setSendError(err instanceof Error ? err.message : "画像の生成に失敗しました。");
       return;
     }
-
-    ctx.drawImage(video, 0, 0, width, height);
     canvas.toBlob(
       (blob) => {
         if (!blob) {

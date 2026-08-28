@@ -1,12 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { Images } from "lucide-react";
+import { Images, LayoutGrid, List } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 const PAGE_SIZE = 100;
 const ALL_SUBJECTS = "";
+const VIEW_MODE_STORAGE_KEY = "dx-sensor.album.view-mode";
+
+type ViewMode = "thumbnail" | "list";
 
 type PictureSendRow = {
   id: string;
@@ -34,12 +37,21 @@ function formatTimestamp(iso: string): string {
   });
 }
 
+function readStoredViewMode(): ViewMode {
+  if (typeof window === "undefined") return "thumbnail";
+  return window.localStorage.getItem(VIEW_MODE_STORAGE_KEY) === "list"
+    ? "list"
+    : "thumbnail";
+}
+
 export function AlbumView({ userId }: AlbumViewProps) {
   const supabase = createClient();
 
   const [items, setItems] = useState<AlbumItem[]>([]);
   const [subjectFilter, setSubjectFilter] = useState(ALL_SUBJECTS);
   const [subjectOptions, setSubjectOptions] = useState<string[]>([]);
+  const [viewMode, setViewMode] = useState<ViewMode>("thumbnail");
+  const [viewModeReady, setViewModeReady] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
@@ -133,6 +145,16 @@ export function AlbumView({ userId }: AlbumViewProps) {
     },
     [attachSignedUrls, subjectFilter, supabase, userId]
   );
+
+  useEffect(() => {
+    setViewMode(readStoredViewMode());
+    setViewModeReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!viewModeReady) return;
+    window.localStorage.setItem(VIEW_MODE_STORAGE_KEY, viewMode);
+  }, [viewMode, viewModeReady]);
 
   useEffect(() => {
     void loadSubjectOptions();
@@ -255,7 +277,7 @@ export function AlbumView({ userId }: AlbumViewProps) {
         送信した写真を一覧表示します。タップで詳細・本文編集・削除ができます。
       </p>
 
-      <div className="mt-5">
+      <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <label className="flex flex-col gap-1.5 text-sm sm:flex-row sm:items-center sm:gap-3">
           <span className="font-medium text-ink">件名</span>
           <select
@@ -271,6 +293,41 @@ export function AlbumView({ userId }: AlbumViewProps) {
             ))}
           </select>
         </label>
+
+        <div
+          className="inline-flex self-start rounded-md border border-line bg-white p-0.5"
+          role="radiogroup"
+          aria-label="表示切替"
+        >
+          <button
+            type="button"
+            role="radio"
+            aria-checked={viewMode === "thumbnail"}
+            onClick={() => setViewMode("thumbnail")}
+            className={`inline-flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs font-medium transition sm:text-sm ${
+              viewMode === "thumbnail"
+                ? "bg-signal text-white"
+                : "text-ink-soft hover:bg-signal-soft hover:text-ink"
+            }`}
+          >
+            <LayoutGrid className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+            サムネイル
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={viewMode === "list"}
+            onClick={() => setViewMode("list")}
+            className={`inline-flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs font-medium transition sm:text-sm ${
+              viewMode === "list"
+                ? "bg-signal text-white"
+                : "text-ink-soft hover:bg-signal-soft hover:text-ink"
+            }`}
+          >
+            <List className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+            リスト
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -283,7 +340,7 @@ export function AlbumView({ userId }: AlbumViewProps) {
         <p className="mt-8 text-sm text-ink-soft">まだ写真がありません。</p>
       )}
 
-      {!loading && items.length > 0 && (
+      {!loading && items.length > 0 && viewMode === "thumbnail" && (
         <ul className="mt-6 grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-3">
           {items.map((item) => (
             <li key={item.id}>
@@ -311,6 +368,43 @@ export function AlbumView({ userId }: AlbumViewProps) {
                     {item.subject_text}
                   </p>
                   <p className="truncate text-[10px] text-ink-soft">
+                    {formatTimestamp(item.created_at)}
+                  </p>
+                </div>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {!loading && items.length > 0 && viewMode === "list" && (
+        <ul className="mt-6 divide-y divide-line overflow-hidden rounded-md border border-line bg-white">
+          {items.map((item) => (
+            <li key={item.id}>
+              <button
+                type="button"
+                onClick={() => openDetail(item)}
+                className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-signal-soft/40"
+              >
+                <div className="h-14 w-14 shrink-0 overflow-hidden rounded bg-line">
+                  {item.thumbnailUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={item.thumbnailUrl}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-[10px] text-ink-soft">
+                      画像なし
+                    </div>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-ink">
+                    {item.subject_text}
+                  </p>
+                  <p className="mt-0.5 truncate text-xs text-ink-soft">
                     {formatTimestamp(item.created_at)}
                   </p>
                 </div>

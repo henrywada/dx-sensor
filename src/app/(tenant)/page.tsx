@@ -36,13 +36,13 @@ const categories: Category[] = [
       {
         icon: ImagePlus,
         title: "写真レポートの送信",
-        description: "件名と本文を付けて写真を撮影し、保存します。",
+        description: "写真付きでレポートを作成・送信します。",
         href: "/send_picture",
       },
       {
         icon: Images,
         title: "写真フォルダーを見る",
-        description: "保存した写真をグリッドで見返し、本文の編集や削除ができます。",
+        description: "写真レポートを表示・編集します。",
         href: "/send_picture_album",
       },
     ],
