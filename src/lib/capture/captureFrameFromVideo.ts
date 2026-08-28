@@ -55,8 +55,28 @@ export function resolveHandheldMount(input: {
   deviceTiltMount?: MountOrientation | null;
 }): MountOrientation {
   if (input.deviceTiltMount) return input.deviceTiltMount;
-  if (input.viewportIsLandscape) return "landscape";
-  return detectHandheldMount(input.screenAngle, false);
+  return input.viewportIsLandscape ? "landscape" : "portrait";
+}
+
+const LANDSCAPE_CONFIRM_READINGS = 2;
+
+/** Portrait applies immediately; landscape needs consecutive gyro readings to ignore a stale first event. */
+export function applyTiltReading(
+  reading: MountOrientation | null,
+  landscapeStreak: number,
+  current: MountOrientation | null
+): { tilt: MountOrientation | null; landscapeStreak: number } {
+  if (reading === "portrait") {
+    return { tilt: "portrait", landscapeStreak: 0 };
+  }
+  if (reading === "landscape") {
+    const nextStreak = landscapeStreak + 1;
+    if (nextStreak >= LANDSCAPE_CONFIRM_READINGS) {
+      return { tilt: "landscape", landscapeStreak: nextStreak };
+    }
+    return { tilt: current, landscapeStreak: nextStreak };
+  }
+  return { tilt: current, landscapeStreak };
 }
 
 /**

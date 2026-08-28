@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   LANDSCAPE_LEFT_TILT_SCREEN_ANGLE,
+  applyTiltReading,
   computeCaptureRotationDeg,
   detectHandheldMount,
   mountFromDeviceTilt,
@@ -61,6 +62,15 @@ describe("resolveHandheldMount", () => {
     ).toBe("portrait");
   });
 
+  it("ignores a stale landscape screen angle when the viewport is portrait", () => {
+    expect(
+      resolveHandheldMount({
+        screenAngle: 90,
+        viewportIsLandscape: false,
+      })
+    ).toBe("portrait");
+  });
+
   it("prefers device tilt portrait over a lagging landscape viewport", () => {
     expect(
       resolveHandheldMount({
@@ -70,6 +80,29 @@ describe("resolveHandheldMount", () => {
         deviceTiltMount: "portrait",
       })
     ).toBe("portrait");
+  });
+});
+
+describe("applyTiltReading", () => {
+  it("does not commit landscape on the first reading", () => {
+    expect(applyTiltReading("landscape", 0, null)).toEqual({
+      tilt: null,
+      landscapeStreak: 1,
+    });
+  });
+
+  it("commits landscape on the second consecutive reading", () => {
+    expect(applyTiltReading("landscape", 1, null)).toEqual({
+      tilt: "landscape",
+      landscapeStreak: 2,
+    });
+  });
+
+  it("applies portrait immediately and resets the landscape streak", () => {
+    expect(applyTiltReading("portrait", 1, "landscape")).toEqual({
+      tilt: "portrait",
+      landscapeStreak: 0,
+    });
   });
 });
 

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Camera, Send, Tag } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { captureHandheldFrame, mountFromDeviceTilt, type MountOrientation } from "@/lib/capture/captureFrameFromVideo";
+import { applyTiltReading, captureHandheldFrame, mountFromDeviceTilt, type MountOrientation } from "@/lib/capture/captureFrameFromVideo";
 import {
   DEFAULT_PICTURE_PRIORITY,
   PICTURE_PRIORITIES,
@@ -77,10 +77,17 @@ export function SendPictureForm({ userId, userEmail }: SendPictureFormProps) {
   const previewUrlRef = useRef<string | null>(null);
   const tiltMountRef = useRef<MountOrientation | null>(null);
   const tiltListenFromRef = useRef(0);
+  const landscapeStreakRef = useRef(0);
   const onDeviceOrientationRef = useRef((event: DeviceOrientationEvent) => {
     if (Date.now() < tiltListenFromRef.current) return;
-    const next = mountFromDeviceTilt(event.gamma, event.beta);
-    if (next) tiltMountRef.current = next;
+    const reading = mountFromDeviceTilt(event.gamma, event.beta);
+    const next = applyTiltReading(
+      reading,
+      landscapeStreakRef.current,
+      tiltMountRef.current
+    );
+    landscapeStreakRef.current = next.landscapeStreak;
+    tiltMountRef.current = next.tilt;
   });
 
   const [subjects, setSubjects] = useState<PictureSendSubject[]>([]);
@@ -133,6 +140,7 @@ export function SendPictureForm({ userId, userEmail }: SendPictureFormProps) {
       window.removeEventListener("deviceorientation", onDeviceOrientationRef.current);
     }
     tiltMountRef.current = null;
+    landscapeStreakRef.current = 0;
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     if (videoRef.current) {
@@ -217,6 +225,7 @@ export function SendPictureForm({ userId, userEmail }: SendPictureFormProps) {
     try {
       await requestMotionPermission();
       tiltMountRef.current = null;
+      landscapeStreakRef.current = 0;
       tiltListenFromRef.current = Date.now() + 300;
       if (typeof window !== "undefined") {
         window.addEventListener("deviceorientation", onDeviceOrientationRef.current);
