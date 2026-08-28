@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { DocumentImagePreviewOverlay } from "./DocumentImagePreviewOverlay";
 import {
   BriefcaseBusiness,
   FileText,
@@ -209,6 +210,9 @@ export function InvoiceAlbum({ documentType, userId, initialOpenId }: InvoiceAlb
   const [tagsDraft, setTagsDraft] = useState("");
   const [contextDateDraft, setContextDateDraft] = useState("");
   const [companyVisibleDraft, setCompanyVisibleDraft] = useState(false);
+  const [previewImage, setPreviewImage] = useState<{ url: string; label: string } | null>(
+    null
+  );
 
   const tagOptions = useMemo(() => {
     return Array.from(new Set(items.flatMap((item) => item.tags))).sort((a, b) =>
@@ -953,6 +957,7 @@ export function InvoiceAlbum({ documentType, userId, initialOpenId }: InvoiceAlb
                 {detail.images.length > 0 && (
                   <section>
                     <h3 className="mb-2 text-sm font-bold text-ink">ページ画像</h3>
+                    <p className="mb-2 text-xs text-ink-soft">サムネイルをタップすると拡大表示できます</p>
                     <div className="flex gap-2 overflow-x-auto pb-2">
                       {detail.images.map((image, idx) => (
                         <div
@@ -960,12 +965,24 @@ export function InvoiceAlbum({ documentType, userId, initialOpenId }: InvoiceAlb
                           className="w-28 shrink-0 overflow-hidden rounded-md border border-line bg-black"
                         >
                           {image.url ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={image.url}
-                              alt={`ページ ${idx + 1}`}
-                              className="aspect-3/4 h-full w-full object-contain"
-                            />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setPreviewImage({
+                                  url: image.url!,
+                                  label: `${idx + 1} ページ`,
+                                })
+                              }
+                              className="block w-full cursor-zoom-in"
+                              aria-label={`${idx + 1} ページを拡大表示`}
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={image.url}
+                                alt={`ページ ${idx + 1}`}
+                                className="aspect-3/4 h-full w-full object-contain"
+                              />
+                            </button>
                           ) : (
                             <div className="flex aspect-3/4 items-center justify-center text-sm text-white/80">
                               画像なし
@@ -1031,7 +1048,7 @@ export function InvoiceAlbum({ documentType, userId, initialOpenId }: InvoiceAlb
                           disabled={detailDisabled}
                           className="accent-signal disabled:opacity-60"
                         />
-                        会社にも公開する
+                        会社に公開する
                       </label>
 
                       <label className="mt-3 block space-y-1.5">
@@ -1252,6 +1269,11 @@ export function InvoiceAlbum({ documentType, userId, initialOpenId }: InvoiceAlb
           </div>
         </div>
       )}
+
+      <DocumentImagePreviewOverlay
+        image={previewImage}
+        onClose={() => setPreviewImage(null)}
+      />
     </div>
   );
 }

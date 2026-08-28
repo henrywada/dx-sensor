@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildInvoiceCsvRows, encodeCsvWithBom } from "./exportCsv";
+import {
+  buildInvoiceCsvRows,
+  buildInvoiceCsvRowsWithHeader,
+  encodeCsvWithBom,
+  INVOICE_CSV_HEADERS,
+} from "./exportCsv";
 
 describe("exportCsv", () => {
   it("outputs header-only row when no line items", () => {
@@ -82,6 +87,25 @@ describe("exportCsv", () => {
     expect(csv).toContain('"b, c"');
     expect(csv).toContain('"d""e"');
     expect(csv).toContain('"f\ng"');
+  });
+
+  it("outputs column header row as first line", () => {
+    const rows = buildInvoiceCsvRowsWithHeader([
+      {
+        id: "doc-1",
+        title: "INV-001",
+        counterparty: "Acme",
+        contextDate: null,
+        amountYen: null,
+        notes: "",
+        tags: [],
+        extracted: {},
+        lineItems: [],
+      },
+    ]);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toEqual([...INVOICE_CSV_HEADERS]);
+    expect(rows[1][1]).toBe("INV-001");
   });
 
   it("produces 25 columns per row", () => {

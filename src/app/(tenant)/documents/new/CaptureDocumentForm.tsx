@@ -683,7 +683,7 @@ export function CaptureDocumentForm({
               disabled={readOnly || busy}
               className="accent-signal disabled:opacity-60"
             />
-            会社にも公開する
+            会社に公開する
           </label>
         </section>
 

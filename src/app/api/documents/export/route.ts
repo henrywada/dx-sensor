@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getActiveTenant } from "@/lib/auth/getActiveTenant";
 import { getViewerContext } from "@/lib/auth/getViewerContext";
 import {
-  buildInvoiceCsvRows,
+  buildInvoiceCsvRowsWithHeader,
   encodeCsvWithBom,
   type InvoiceExportDocument,
   type InvoiceExportLineItem,
@@ -183,7 +183,7 @@ export async function POST(req: Request) {
     .filter((row): row is DocumentRow => row !== undefined)
     .map((row) => toExportDocument(row, lineItemsByDocument.get(row.id) ?? []));
 
-  const csvRows = buildInvoiceCsvRows(documents);
+  const csvRows = buildInvoiceCsvRowsWithHeader(documents);
   const bodyBuffer = encodeCsvWithBom(csvRows);
   const timestamp = exportFilenameTimestamp();
 

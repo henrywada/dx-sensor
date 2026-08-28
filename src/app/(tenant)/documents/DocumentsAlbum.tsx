@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { DocumentImagePreviewOverlay } from "./DocumentImagePreviewOverlay";
 import {
   BriefcaseBusiness,
   Contact,
@@ -188,6 +189,9 @@ export function DocumentsAlbum({
   const [tagsDraft, setTagsDraft] = useState("");
   const [contextDateDraft, setContextDateDraft] = useState("");
   const [companyVisibleDraft, setCompanyVisibleDraft] = useState(false);
+  const [previewImage, setPreviewImage] = useState<{ url: string; label: string } | null>(
+    null
+  );
 
   const tagOptions = useMemo(() => {
     return Array.from(new Set(items.flatMap((item) => item.tags))).sort((a, b) =>
@@ -742,6 +746,7 @@ export function DocumentsAlbum({
             {detail && (
               <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
                 <section className="space-y-3">
+                  <p className="text-xs text-ink-soft">写真をタップすると拡大表示できます</p>
                   <div className="grid grid-cols-2 gap-2">
                     {detail.images.map((image) => (
                       <div
@@ -749,12 +754,24 @@ export function DocumentsAlbum({
                         className="overflow-hidden rounded-md border border-line bg-black"
                       >
                         {image.url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={image.url}
-                            alt={`名刺${roleLabel(image.role)}`}
-                            className="aspect-3/4 h-full w-full object-contain"
-                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setPreviewImage({
+                                url: image.url!,
+                                label: roleLabel(image.role),
+                              })
+                            }
+                            className="block w-full cursor-zoom-in"
+                            aria-label={`${roleLabel(image.role)}を拡大表示`}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={image.url}
+                              alt={`名刺${roleLabel(image.role)}`}
+                              className="aspect-3/4 h-full w-full object-contain"
+                            />
+                          </button>
                         ) : (
                           <div className="flex aspect-3/4 items-center justify-center text-sm text-white/80">
                             画像なし
@@ -820,7 +837,7 @@ export function DocumentsAlbum({
                         disabled={detailDisabled}
                         className="accent-signal disabled:opacity-60"
                       />
-                      会社にも公開する
+                      会社に公開する
                     </label>
 
                     <label className="mt-3 block space-y-1.5">
@@ -893,6 +910,11 @@ export function DocumentsAlbum({
           </div>
         </div>
       )}
+
+      <DocumentImagePreviewOverlay
+        image={previewImage}
+        onClose={() => setPreviewImage(null)}
+      />
     </div>
   );
 }

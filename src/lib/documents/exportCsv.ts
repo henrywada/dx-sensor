@@ -21,6 +21,35 @@ export interface InvoiceExportDocument {
   lineItems: InvoiceExportLineItem[];
 }
 
+/** CSV 1行目の列名（spec 25列） */
+export const INVOICE_CSV_HEADERS = [
+  "請求書ID",
+  "請求番号",
+  "発行日",
+  "支払期限",
+  "請求先",
+  "請求元",
+  "登録番号",
+  "小計",
+  "消費税10%",
+  "消費税8%",
+  "消費税合計",
+  "合計",
+  "振込先",
+  "備考",
+  "メモ",
+  "タグ",
+  "取引日",
+  "明細行番号",
+  "明細日付",
+  "品名",
+  "数量",
+  "単位",
+  "単価",
+  "金額",
+  "税率",
+] as const;
+
 function stringField(value: string | undefined): string {
   return value ?? "";
 }
@@ -104,6 +133,12 @@ export function buildInvoiceCsvRows(
   }
 
   return rows;
+}
+
+export function buildInvoiceCsvRowsWithHeader(
+  documents: InvoiceExportDocument[]
+): string[][] {
+  return [[...INVOICE_CSV_HEADERS], ...buildInvoiceCsvRows(documents)];
 }
 
 export function encodeCsvWithBom(rows: string[][]): Buffer {
