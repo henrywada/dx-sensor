@@ -46,11 +46,28 @@ function readStoredViewMode(): ViewMode {
     : "thumbnail";
 }
 
+function isHighPriority(priority: unknown): boolean {
+  return priority === "high";
+}
+
+function HighPriorityBadge({ size = "md" }: { size?: "sm" | "md" }) {
+  const sizeClass =
+    size === "sm" ? "px-1 py-px text-[10px]" : "px-1.5 py-0.5 text-xs";
+  return (
+    <span
+      className={`inline-flex items-center rounded font-bold text-white bg-alert ${sizeClass}`}
+    >
+      高
+    </span>
+  );
+}
+
 export function AlbumView({ userId }: AlbumViewProps) {
   const supabase = createClient();
 
   const [items, setItems] = useState<AlbumItem[]>([]);
   const [subjectFilter, setSubjectFilter] = useState(ALL_SUBJECTS);
+  const [highOnly, setHighOnly] = useState(false);
   const [subjectOptions, setSubjectOptions] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>("thumbnail");
   const [viewModeReady, setViewModeReady] = useState(false);
@@ -124,6 +141,9 @@ export function AlbumView({ userId }: AlbumViewProps) {
       if (subjectFilter !== ALL_SUBJECTS) {
         query = query.eq("subject_text", subjectFilter);
       }
+      if (highOnly) {
+        query = query.eq("priority", "high");
+      }
 
       const { data, error: qError } = await query;
 
@@ -145,7 +165,7 @@ export function AlbumView({ userId }: AlbumViewProps) {
       setLoading(false);
       setLoadingMore(false);
     },
-    [attachSignedUrls, subjectFilter, supabase, userId]
+    [attachSignedUrls, highOnly, subjectFilter, supabase, userId]
   );
 
   useEffect(() => {
@@ -280,21 +300,33 @@ export function AlbumView({ userId }: AlbumViewProps) {
       </p>
 
       <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <label className="flex flex-col gap-1.5 text-sm sm:flex-row sm:items-center sm:gap-3">
-          <span className="font-medium text-ink">件名</span>
-          <select
-            value={subjectFilter}
-            onChange={(e) => setSubjectFilter(e.target.value)}
-            className="w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-signal focus:ring-1 focus:ring-signal sm:max-w-xs"
-          >
-            <option value={ALL_SUBJECTS}>すべて</option>
-            {subjectOptions.map((subject) => (
-              <option key={subject} value={subject}>
-                {subject}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <label className="flex flex-col gap-1.5 text-sm sm:flex-row sm:items-center sm:gap-3">
+            <span className="font-medium text-ink">件名</span>
+            <select
+              value={subjectFilter}
+              onChange={(e) => setSubjectFilter(e.target.value)}
+              className="w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-signal focus:ring-1 focus:ring-signal sm:max-w-xs"
+            >
+              <option value={ALL_SUBJECTS}>すべて</option>
+              {subjectOptions.map((subject) => (
+                <option key={subject} value={subject}>
+                  {subject}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="inline-flex cursor-pointer items-center gap-1.5 self-start text-sm text-ink">
+            <input
+              type="checkbox"
+              checked={highOnly}
+              onChange={(e) => setHighOnly(e.target.checked)}
+              className="accent-alert"
+            />
+            高のみ表示
+          </label>
+        </div>
 
         <div
           className="inline-flex self-start rounded-md border border-line bg-white p-0.5"
@@ -339,7 +371,9 @@ export function AlbumView({ userId }: AlbumViewProps) {
       {loading && <p className="mt-8 text-sm text-ink-soft">読み込み中...</p>}
 
       {!loading && items.length === 0 && (
-        <p className="mt-8 text-sm text-ink-soft">まだ写真がありません。</p>
+        <p className="mt-8 text-sm text-ink-soft">
+          {highOnly ? "優先度「高」の写真はありません。" : "まだ写真がありません。"}
+        </p>
       )}
 
       {!loading && items.length > 0 && viewMode === "thumbnail" && (
@@ -351,7 +385,7 @@ export function AlbumView({ userId }: AlbumViewProps) {
                 onClick={() => openDetail(item)}
                 className="group flex w-full flex-col overflow-hidden rounded-md border border-line bg-white text-left transition hover:border-signal/50"
               >
-                <div className="aspect-square w-full overflow-hidden bg-line">
+                <div className="relative aspect-square w-full overflow-hidden bg-line">
                   {item.thumbnailUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -364,14 +398,21 @@ export function AlbumView({ userId }: AlbumViewProps) {
                       画像なし
                     </div>
                   )}
+                  {isHighPriority(item.priority) && (
+                    <span className="absolute left-1 top-1">
+                      <HighPriorityBadge size="sm" />
+                    </span>
+                  )}
                 </div>
                 <div className="space-y-0.5 p-1.5 sm:p-2">
                   <p className="truncate text-[11px] font-medium text-ink sm:text-xs">
                     {item.subject_text}
                   </p>
-                  <p className="truncate text-[10px] text-ink-soft">
-                    優先度：{picturePriorityLabel(item.priority)}
-                  </p>
+                  {!isHighPriority(item.priority) && (
+                    <p className="truncate text-[10px] text-ink-soft">
+                      優先度：{picturePriorityLabel(item.priority)}
+                    </p>
+                  )}
                   <p className="truncate text-[10px] text-ink-soft">
                     {formatTimestamp(item.created_at)}
                   </p>
@@ -391,7 +432,7 @@ export function AlbumView({ userId }: AlbumViewProps) {
                 onClick={() => openDetail(item)}
                 className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-signal-soft/40"
               >
-                <div className="h-14 w-14 shrink-0 overflow-hidden rounded bg-line">
+                <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded bg-line">
                   {item.thumbnailUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -404,13 +445,22 @@ export function AlbumView({ userId }: AlbumViewProps) {
                       画像なし
                     </div>
                   )}
+                  {isHighPriority(item.priority) && (
+                    <span className="absolute left-0.5 top-0.5">
+                      <HighPriorityBadge size="sm" />
+                    </span>
+                  )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-ink">
-                    {item.subject_text}
+                  <p className="flex items-center gap-1.5 truncate text-sm font-medium text-ink">
+                    <span className="truncate">{item.subject_text}</span>
+                    {isHighPriority(item.priority) && <HighPriorityBadge />}
                   </p>
                   <p className="mt-0.5 truncate text-xs text-ink-soft">
-                    優先度：{picturePriorityLabel(item.priority)}　{formatTimestamp(item.created_at)}
+                    {!isHighPriority(item.priority) && (
+                      <>優先度：{picturePriorityLabel(item.priority)}　</>
+                    )}
+                    {formatTimestamp(item.created_at)}
                   </p>
                 </div>
               </button>
@@ -445,8 +495,12 @@ export function AlbumView({ userId }: AlbumViewProps) {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-3">
-              <h2 id="album-detail-title" className="text-base font-semibold text-ink">
-                {selected.subject_text}
+              <h2
+                id="album-detail-title"
+                className="flex min-w-0 items-center gap-2 text-base font-semibold text-ink"
+              >
+                <span className="truncate">{selected.subject_text}</span>
+                {isHighPriority(selected.priority) && <HighPriorityBadge />}
               </h2>
               <button
                 type="button"
@@ -458,7 +512,10 @@ export function AlbumView({ userId }: AlbumViewProps) {
             </div>
 
             <p className="mt-1 text-xs text-ink-soft">
-              優先度：{picturePriorityLabel(selected.priority)}　{formatTimestamp(selected.created_at)}
+              {!isHighPriority(selected.priority) && (
+                <>優先度：{picturePriorityLabel(selected.priority)}　</>
+              )}
+              {formatTimestamp(selected.created_at)}
             </p>
 
             <div className="mt-3 overflow-hidden rounded-md border border-line bg-black">

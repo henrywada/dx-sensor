@@ -25,6 +25,41 @@ export function detectHandheldMount(
   return viewportIsLandscape ? "landscape" : "portrait";
 }
 
+/** |gamma| above this (degrees) means the phone is physically on its side. */
+const LANDSCAPE_GAMMA_DEG = 45;
+
+/**
+ * Physical tilt from DeviceOrientation, independent of screen-rotation lock.
+ * Returns null when the reading is missing or the device is lying flat.
+ */
+export function mountFromDeviceTilt(
+  gamma: number | null | undefined,
+  beta?: number | null
+): MountOrientation | null {
+  if (gamma == null || Number.isNaN(gamma)) return null;
+  if (
+    beta != null &&
+    !Number.isNaN(beta) &&
+    Math.abs(beta) < 20 &&
+    Math.abs(gamma) < 20
+  ) {
+    return null;
+  }
+  return Math.abs(gamma) >= LANDSCAPE_GAMMA_DEG ? "landscape" : "portrait";
+}
+
+export function resolveHandheldMount(input: {
+  screenAngle: number;
+  viewportIsLandscape: boolean;
+  screenOrientationType?: string;
+  deviceTiltMount?: MountOrientation | null;
+}): MountOrientation {
+  if (input.deviceTiltMount) return input.deviceTiltMount;
+  const type = input.screenOrientationType ?? "";
+  if (type.startsWith("landscape")) return "landscape";
+  return detectHandheldMount(input.screenAngle, input.viewportIsLandscape);
+}
+
 /**
  * Clockwise rotation so saved pixels match the physical mount.
  *
@@ -103,11 +138,23 @@ export function captureFrameFromVideo(
 }
 
 /** Handheld shutter: landscape always bakes as a left 90° phone tilt. */
-export function captureHandheldFrame(video: HTMLVideoElement): HTMLCanvasElement {
+export function captureHandheldFrame(
+  video: HTMLVideoElement,
+  deviceTiltMount?: MountOrientation | null
+): HTMLCanvasElement {
   const viewportIsLandscape =
-    typeof window !== "undefined" && window.innerWidth > window.innerHeight;
+    typeof window !== "undefined" &&
+    (window.innerWidth > window.innerHeight ||
+      Boolean(window.matchMedia?.("(orientation: landscape)").matches));
   const rawAngle = readScreenAngle();
-  const mount = detectHandheldMount(rawAngle, viewportIsLandscape);
+  const screenOrientationType =
+    typeof screen !== "undefined" ? screen.orientation?.type ?? "" : "";
+  const mount = resolveHandheldMount({
+    screenAngle: rawAngle,
+    viewportIsLandscape,
+    screenOrientationType,
+    deviceTiltMount,
+  });
   const screenAngle =
     mount === "landscape" ? LANDSCAPE_LEFT_TILT_SCREEN_ANGLE : rawAngle;
   return captureFrameFromVideo(video, mount, false, screenAngle);

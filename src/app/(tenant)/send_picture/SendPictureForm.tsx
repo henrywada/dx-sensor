@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Camera, Send, Tag } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { captureHandheldFrame } from "@/lib/capture/captureFrameFromVideo";
+import { captureHandheldFrame, mountFromDeviceTilt, type MountOrientation } from "@/lib/capture/captureFrameFromVideo";
 import {
   DEFAULT_PICTURE_PRIORITY,
   PICTURE_PRIORITIES,
@@ -57,11 +57,29 @@ function truncate(text: string, max: number): string {
   return `${text.slice(0, max)}…`;
 }
 
+async function requestMotionPermission(): Promise<void> {
+  try {
+    const DOE = DeviceOrientationEvent as typeof DeviceOrientationEvent & {
+      requestPermission?: () => Promise<string>;
+    };
+    if (typeof DOE.requestPermission === "function") {
+      await DOE.requestPermission();
+    }
+  } catch {
+    // Permission denied: shutter falls back to screen orientation.
+  }
+}
+
 export function SendPictureForm({ userId, userEmail }: SendPictureFormProps) {
   const supabase = createClient();
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const previewUrlRef = useRef<string | null>(null);
+  const tiltMountRef = useRef<MountOrientation | null>(null);
+  const onDeviceOrientationRef = useRef((event: DeviceOrientationEvent) => {
+    const next = mountFromDeviceTilt(event.gamma, event.beta);
+    if (next) tiltMountRef.current = next;
+  });
 
   const [subjects, setSubjects] = useState<PictureSendSubject[]>([]);
   const [subjectsLoading, setSubjectsLoading] = useState(true);
@@ -109,6 +127,10 @@ export function SendPictureForm({ userId, userEmail }: SendPictureFormProps) {
   }, [revokePreviewUrl]);
 
   const stopCamera = useCallback(() => {
+    if (typeof window !== "undefined") {
+      window.removeEventListener("deviceorientation", onDeviceOrientationRef.current);
+    }
+    tiltMountRef.current = null;
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     if (videoRef.current) {
@@ -191,6 +213,11 @@ export function SendPictureForm({ userId, userEmail }: SendPictureFormProps) {
     }
 
     try {
+      await requestMotionPermission();
+      if (typeof window !== "undefined") {
+        window.addEventListener("deviceorientation", onDeviceOrientationRef.current);
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: false,
         video: {
@@ -208,6 +235,7 @@ export function SendPictureForm({ userId, userEmail }: SendPictureFormProps) {
       }
       setCameraState("ready");
     } catch (err) {
+      stopCamera();
       console.error("getUserMedia failed", err);
       const name = err instanceof DOMException ? err.name : "";
       if (name === "NotAllowedError" || name === "PermissionDeniedError") {
@@ -238,7 +266,7 @@ export function SendPictureForm({ userId, userEmail }: SendPictureFormProps) {
 
     let canvas: HTMLCanvasElement;
     try {
-      canvas = captureHandheldFrame(video);
+      canvas = captureHandheldFrame(video, tiltMountRef.current);
     } catch (err) {
       setSendError(err instanceof Error ? err.message : "画像の生成に失敗しました。");
       return;

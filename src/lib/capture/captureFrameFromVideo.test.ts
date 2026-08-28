@@ -3,6 +3,8 @@ import {
   LANDSCAPE_LEFT_TILT_SCREEN_ANGLE,
   computeCaptureRotationDeg,
   detectHandheldMount,
+  mountFromDeviceTilt,
+  resolveHandheldMount,
 } from "./captureFrameFromVideo";
 
 describe("detectHandheldMount", () => {
@@ -16,6 +18,47 @@ describe("detectHandheldMount", () => {
     expect(detectHandheldMount(0, false)).toBe("portrait");
     expect(detectHandheldMount(0, true)).toBe("landscape");
     expect(detectHandheldMount(180, false)).toBe("portrait");
+  });
+});
+
+describe("mountFromDeviceTilt", () => {
+  it("treats |gamma| >= 45 as landscape even when the screen stays portrait", () => {
+    expect(mountFromDeviceTilt(-90, 0)).toBe("landscape");
+    expect(mountFromDeviceTilt(90, 0)).toBe("landscape");
+    expect(mountFromDeviceTilt(-45, 10)).toBe("landscape");
+  });
+
+  it("treats small gamma as portrait", () => {
+    expect(mountFromDeviceTilt(0, 90)).toBe("portrait");
+    expect(mountFromDeviceTilt(20, 80)).toBe("portrait");
+  });
+
+  it("returns null when lying flat or gamma is missing", () => {
+    expect(mountFromDeviceTilt(null, 0)).toBeNull();
+    expect(mountFromDeviceTilt(5, 5)).toBeNull();
+  });
+});
+
+describe("resolveHandheldMount", () => {
+  it("prefers device tilt over a portrait-locked screen", () => {
+    expect(
+      resolveHandheldMount({
+        screenAngle: 0,
+        viewportIsLandscape: false,
+        screenOrientationType: "portrait-primary",
+        deviceTiltMount: "landscape",
+      })
+    ).toBe("landscape");
+  });
+
+  it("uses screen.orientation.type when tilt is unavailable", () => {
+    expect(
+      resolveHandheldMount({
+        screenAngle: 0,
+        viewportIsLandscape: false,
+        screenOrientationType: "landscape-primary",
+      })
+    ).toBe("landscape");
   });
 });
 
