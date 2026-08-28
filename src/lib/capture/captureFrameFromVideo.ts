@@ -55,9 +55,8 @@ export function resolveHandheldMount(input: {
   deviceTiltMount?: MountOrientation | null;
 }): MountOrientation {
   if (input.deviceTiltMount) return input.deviceTiltMount;
-  const type = input.screenOrientationType ?? "";
-  if (type.startsWith("landscape")) return "landscape";
-  return detectHandheldMount(input.screenAngle, input.viewportIsLandscape);
+  if (input.viewportIsLandscape) return "landscape";
+  return detectHandheldMount(input.screenAngle, false);
 }
 
 /**
@@ -143,9 +142,7 @@ export function captureHandheldFrame(
   deviceTiltMount?: MountOrientation | null
 ): HTMLCanvasElement {
   const viewportIsLandscape =
-    typeof window !== "undefined" &&
-    (window.innerWidth > window.innerHeight ||
-      Boolean(window.matchMedia?.("(orientation: landscape)").matches));
+    typeof window !== "undefined" && window.innerWidth > window.innerHeight;
   const rawAngle = readScreenAngle();
   const screenOrientationType =
     typeof screen !== "undefined" ? screen.orientation?.type ?? "" : "";

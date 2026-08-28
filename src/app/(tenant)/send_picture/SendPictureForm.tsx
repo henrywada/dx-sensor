@@ -76,7 +76,9 @@ export function SendPictureForm({ userId, userEmail }: SendPictureFormProps) {
   const streamRef = useRef<MediaStream | null>(null);
   const previewUrlRef = useRef<string | null>(null);
   const tiltMountRef = useRef<MountOrientation | null>(null);
+  const tiltListenFromRef = useRef(0);
   const onDeviceOrientationRef = useRef((event: DeviceOrientationEvent) => {
+    if (Date.now() < tiltListenFromRef.current) return;
     const next = mountFromDeviceTilt(event.gamma, event.beta);
     if (next) tiltMountRef.current = next;
   });
@@ -214,6 +216,8 @@ export function SendPictureForm({ userId, userEmail }: SendPictureFormProps) {
 
     try {
       await requestMotionPermission();
+      tiltMountRef.current = null;
+      tiltListenFromRef.current = Date.now() + 300;
       if (typeof window !== "undefined") {
         window.addEventListener("deviceorientation", onDeviceOrientationRef.current);
       }

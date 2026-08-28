@@ -51,14 +51,25 @@ describe("resolveHandheldMount", () => {
     ).toBe("landscape");
   });
 
-  it("uses screen.orientation.type when tilt is unavailable", () => {
+  it("prefers live viewport over a stale landscape screen.orientation.type", () => {
     expect(
       resolveHandheldMount({
         screenAngle: 0,
         viewportIsLandscape: false,
         screenOrientationType: "landscape-primary",
       })
-    ).toBe("landscape");
+    ).toBe("portrait");
+  });
+
+  it("prefers device tilt portrait over a lagging landscape viewport", () => {
+    expect(
+      resolveHandheldMount({
+        screenAngle: 90,
+        viewportIsLandscape: true,
+        screenOrientationType: "landscape-primary",
+        deviceTiltMount: "portrait",
+      })
+    ).toBe("portrait");
   });
 });
 
