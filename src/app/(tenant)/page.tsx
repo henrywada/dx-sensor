@@ -19,7 +19,7 @@ const categories: Category[] = [
       {
         icon: Aperture,
         title: "スマホのカメラで定点監視",
-        description: "スマホのカメラ映像をAIで解析し、変化を監視します。",
+        description: "定点観測した画像をAIが解析し、変化を記録します。",
         href: "/capture_auto",
       },
       {
@@ -81,11 +81,7 @@ const categories: Category[] = [
 export default function TenantTopPage() {
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
-      <p className="text-sm text-ink-soft">
-        定点観測した画像をAIが解析し、変化を記録します。使いたい機能を選んでください。
-      </p>
-
-      <div className="mt-8 space-y-10">
+      <div className="space-y-10">
         {categories.map((category) => (
           <section key={category.label}>
             <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-ink-soft">
