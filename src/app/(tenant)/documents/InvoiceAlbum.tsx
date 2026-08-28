@@ -183,7 +183,7 @@ export function InvoiceAlbum({ documentType, userId, initialOpenId }: InvoiceAlb
   const [amountMax, setAmountMax] = useState("");
   const [searchText, setSearchText] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
-  const [viewMode, setViewMode] = useState<ViewMode>("thumbnail");
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);

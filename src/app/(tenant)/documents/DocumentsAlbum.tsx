@@ -165,7 +165,7 @@ export function DocumentsAlbum({
   const [toDate, setToDate] = useState("");
   const [searchText, setSearchText] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
-  const [viewMode, setViewMode] = useState<ViewMode>("thumbnail");
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
@@ -436,7 +436,7 @@ export function DocumentsAlbum({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Contact className="h-5 w-5 text-signal" strokeWidth={1.75} />
-          <h1 className="text-lg font-semibold text-ink">文書ホルダー</h1>
+          <h1 className="text-lg font-semibold text-ink">名刺ホルダー</h1>
         </div>
         <div className="flex items-center gap-3 text-sm">
           <Link

@@ -58,7 +58,7 @@ const categories: Category[] = [
       },
       {
         icon: FolderOpen,
-        title: "文書ホルダーを見る",
+        title: "名刺ホルダー",
         description: "保存した名刺を検索・編集し、必要なものを会社にも公開します。",
         href: "/documents?type=business_card",
       },

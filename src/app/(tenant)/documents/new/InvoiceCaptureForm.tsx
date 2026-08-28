@@ -155,7 +155,7 @@ export function InvoiceCaptureForm({ tenantId, userId }: InvoiceCaptureFormProps
   const [notes, setNotes] = useState("");
   const [tagsInput, setTagsInput] = useState("");
   const [contextDate, setContextDate] = useState("");
-  const [companyVisible, setCompanyVisible] = useState(false);
+  const [companyVisible, setCompanyVisible] = useState(true);
   const [analysisRunId, setAnalysisRunId] = useState<string | null>(null);
   const [rawOcr, setRawOcr] = useState("");
   const [ocrWarning, setOcrWarning] = useState(false);
@@ -389,7 +389,7 @@ export function InvoiceCaptureForm({ tenantId, userId }: InvoiceCaptureFormProps
       setNotes(duplicateSeed?.notes ?? "");
       setTagsInput(duplicateSeed?.tags?.join(", ") ?? "");
       setContextDate(initialContextDate);
-      setCompanyVisible(duplicateSeed?.companyVisible ?? false);
+      setCompanyVisible(duplicateSeed?.companyVisible ?? true);
       setAnalysisRunId(result.analysisRunId ?? null);
       setRawOcr(result.rawOcr ?? "");
       setOcrWarning(result.warning === "ocr_failed");
@@ -775,7 +775,7 @@ export function InvoiceCaptureForm({ tenantId, userId }: InvoiceCaptureFormProps
               disabled={readOnly || busy}
               className="accent-signal disabled:opacity-60"
             />
-            会社にも公開する
+            会社に公開する
           </label>
         </section>
 
