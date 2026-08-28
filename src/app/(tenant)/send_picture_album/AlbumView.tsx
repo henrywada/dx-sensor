@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Images, LayoutGrid, List } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { picturePriorityLabel, type PicturePriority } from "@/lib/picture-sends/priority";
 
 const PAGE_SIZE = 100;
 const ALL_SUBJECTS = "";
@@ -15,6 +16,7 @@ type PictureSendRow = {
   id: string;
   subject_text: string;
   body_text: string;
+  priority: PicturePriority;
   storage_path: string;
   created_at: string;
 };
@@ -114,7 +116,7 @@ export function AlbumView({ userId }: AlbumViewProps) {
 
       let query = supabase
         .from("picture_sends")
-        .select("id, subject_text, body_text, storage_path, created_at")
+        .select("id, subject_text, body_text, priority, storage_path, created_at")
         .eq("user_id", userId)
         .order("created_at", { ascending: false })
         .range(offset, offset + PAGE_SIZE - 1);
@@ -368,6 +370,9 @@ export function AlbumView({ userId }: AlbumViewProps) {
                     {item.subject_text}
                   </p>
                   <p className="truncate text-[10px] text-ink-soft">
+                    優先度：{picturePriorityLabel(item.priority)}
+                  </p>
+                  <p className="truncate text-[10px] text-ink-soft">
                     {formatTimestamp(item.created_at)}
                   </p>
                 </div>
@@ -405,7 +410,7 @@ export function AlbumView({ userId }: AlbumViewProps) {
                     {item.subject_text}
                   </p>
                   <p className="mt-0.5 truncate text-xs text-ink-soft">
-                    {formatTimestamp(item.created_at)}
+                    優先度：{picturePriorityLabel(item.priority)}　{formatTimestamp(item.created_at)}
                   </p>
                 </div>
               </button>
@@ -453,7 +458,7 @@ export function AlbumView({ userId }: AlbumViewProps) {
             </div>
 
             <p className="mt-1 text-xs text-ink-soft">
-              {formatTimestamp(selected.created_at)}
+              優先度：{picturePriorityLabel(selected.priority)}　{formatTimestamp(selected.created_at)}
             </p>
 
             <div className="mt-3 overflow-hidden rounded-md border border-line bg-black">

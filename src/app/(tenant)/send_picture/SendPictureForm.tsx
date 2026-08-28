@@ -6,6 +6,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { captureHandheldFrame } from "@/lib/capture/captureFrameFromVideo";
 import {
+  DEFAULT_PICTURE_PRIORITY,
+  PICTURE_PRIORITIES,
+  PICTURE_PRIORITY_LABELS,
+  picturePriorityLabel,
+  type PicturePriority,
+} from "@/lib/picture-sends/priority";
+import {
   SubjectManageModal,
   type PictureSendSubject,
 } from "./SubjectManageModal";
@@ -23,6 +30,7 @@ type PictureSendRow = {
   user_email: string;
   subject_text: string;
   body_text: string;
+  priority: PicturePriority;
   storage_path: string;
   created_at: string;
 };
@@ -32,7 +40,7 @@ type RecentSend = PictureSendRow & {
 };
 
 const OTHER_SUBJECT_VALUE = "__other__";
-const RECENT_LIMIT = 20;
+const RECENT_LIMIT = 5;
 
 function formatTimestamp(iso: string): string {
   return new Date(iso).toLocaleString("ja-JP", {
@@ -61,6 +69,7 @@ export function SendPictureForm({ userId, userEmail }: SendPictureFormProps) {
   const [selectedSubjectId, setSelectedSubjectId] = useState("");
   const [adHocSubject, setAdHocSubject] = useState("");
   const [bodyText, setBodyText] = useState("");
+  const [priority, setPriority] = useState<PicturePriority>(DEFAULT_PICTURE_PRIORITY);
 
   const [cameraState, setCameraState] = useState<CameraState>("idle");
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -127,7 +136,7 @@ export function SendPictureForm({ userId, userEmail }: SendPictureFormProps) {
     setRecentLoading(true);
     const { data, error } = await supabase
       .from("picture_sends")
-      .select("id, user_email, subject_text, body_text, storage_path, created_at")
+      .select("id, user_email, subject_text, body_text, priority, storage_path, created_at")
       .order("created_at", { ascending: false })
       .limit(RECENT_LIMIT);
 
@@ -302,6 +311,7 @@ export function SendPictureForm({ userId, userEmail }: SendPictureFormProps) {
         subject_id: subject.subjectId,
         subject_text: subject.subjectText,
         body_text: bodyText,
+        priority,
         storage_path: path,
       });
 
@@ -311,6 +321,7 @@ export function SendPictureForm({ userId, userEmail }: SendPictureFormProps) {
       setSelectedSubjectId("");
       setAdHocSubject("");
       setBodyText("");
+      setPriority(DEFAULT_PICTURE_PRIORITY);
       clearPreview();
       stopCamera();
       setCameraState("idle");
@@ -403,6 +414,26 @@ export function SendPictureForm({ userId, userEmail }: SendPictureFormProps) {
           />
         </label>
       </div>
+
+      <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <legend className="float-left mr-1 w-auto p-0 text-sm font-medium text-ink">
+          優先度：
+        </legend>
+        {PICTURE_PRIORITIES.map((value) => (
+          <label key={value} className="inline-flex cursor-pointer items-center gap-1.5 text-sm text-ink">
+            <input
+              type="radio"
+              name="picture-priority"
+              value={value}
+              checked={priority === value}
+              onChange={() => setPriority(value)}
+              disabled={sendStatus === "sending"}
+              className="accent-signal"
+            />
+            <span>{PICTURE_PRIORITY_LABELS[value]}</span>
+          </label>
+        ))}
+      </fieldset>
 
       <div className="space-y-3">
         <button
@@ -543,7 +574,10 @@ export function SendPictureForm({ userId, userEmail }: SendPictureFormProps) {
                 )}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-xs text-ink-soft">{formatTimestamp(send.created_at)}</p>
+                <p className="text-xs text-ink-soft">
+                  {formatTimestamp(send.created_at)}
+                  <span className="ml-2">優先度：{picturePriorityLabel(send.priority)}</span>
+                </p>
                 <p className="mt-0.5 truncate text-sm font-medium text-ink">
                   {send.subject_text}
                 </p>
