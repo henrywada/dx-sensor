@@ -21,7 +21,7 @@ export function AppHeader({ variant, isDeveloper = false, email = null }: AppHea
 
   return (
     <header className="border-b border-line bg-paper">
-      <div className="flex w-full items-center justify-between px-8 py-3">
+      <div className="flex w-full items-center justify-between gap-2 px-4 py-3 sm:px-8">
         <Link href="/" className="flex items-center gap-2.5 text-ink">
           <LogoMark className={`h-6 w-6 ${isAdmin ? "text-alert" : "text-signal"}`} />
           <span className="text-lg font-bold tracking-tight">
@@ -29,16 +29,17 @@ export function AppHeader({ variant, isDeveloper = false, email = null }: AppHea
           </span>
         </Link>
 
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
           {isAdmin ? (
             <>
               <LogoutButton />
               <Link
                 href="/"
-                className="flex items-center gap-1.5 rounded-full border border-line px-4 py-1.5 text-sm font-medium text-ink transition-colors hover:border-signal hover:text-signal"
+                className="flex items-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:border-signal hover:text-signal sm:px-4"
               >
-                <ArrowLeftCircle className="h-4 w-4" strokeWidth={2} />
-                テナント画面へ
+                <ArrowLeftCircle className="h-4 w-4 shrink-0" strokeWidth={2} />
+                <span className="sm:hidden">テナントへ</span>
+                <span className="hidden sm:inline">テナント画面へ</span>
               </Link>
             </>
           ) : (

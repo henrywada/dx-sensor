@@ -17,6 +17,7 @@ import {
   INVOICE_FIELD_LABELS,
   type InvoiceHeaderKey,
 } from "@/lib/documents/types/invoice/plugin";
+import type { InvoiceCsvExportMode } from "@/lib/documents/exportCsv";
 import type { LineItemDraft } from "@/lib/documents/pluginTypes";
 
 const ALL_TAGS = "";
@@ -194,6 +195,7 @@ export function InvoiceAlbum({ documentType, userId, initialOpenId }: InvoiceAlb
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [csvExportMode, setCsvExportMode] = useState<InvoiceCsvExportMode>("summary");
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<InvoiceDetail | null>(null);
@@ -360,6 +362,7 @@ export function InvoiceAlbum({ documentType, userId, initialOpenId }: InvoiceAlb
         body: JSON.stringify({
           documentType: "invoice",
           documentIds: Array.from(selectedIds),
+          exportMode: csvExportMode,
         }),
       });
       if (!response.ok) {
@@ -753,6 +756,31 @@ export function InvoiceAlbum({ documentType, userId, initialOpenId }: InvoiceAlb
           >
             {exporting ? "エクスポート中..." : "CSV エクスポート"}
           </button>
+          <fieldset className="inline-flex flex-wrap items-center gap-3 border-0 p-0">
+            <legend className="sr-only">CSV出力形式</legend>
+            <label className="inline-flex cursor-pointer items-center gap-1.5 text-sm text-ink">
+              <input
+                type="radio"
+                name="csvExportMode"
+                value="summary"
+                checked={csvExportMode === "summary"}
+                onChange={() => setCsvExportMode("summary")}
+                className="accent-signal"
+              />
+              合計行のみ出力する
+            </label>
+            <label className="inline-flex cursor-pointer items-center gap-1.5 text-sm text-ink">
+              <input
+                type="radio"
+                name="csvExportMode"
+                value="with_line_items"
+                checked={csvExportMode === "with_line_items"}
+                onChange={() => setCsvExportMode("with_line_items")}
+                className="accent-signal"
+              />
+              合計+明細行を出力する
+            </label>
+          </fieldset>
           {exportError && <p className="text-sm text-alert">{exportError}</p>}
         </div>
       )}

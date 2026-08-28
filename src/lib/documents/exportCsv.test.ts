@@ -33,8 +33,52 @@ describe("exportCsv", () => {
     expect(buf[2]).toBe(0xbf);
   });
 
-  it("outputs one row per line item sorted by line_no", () => {
-    const rows = buildInvoiceCsvRows([
+  it("outputs one row per invoice in summary mode even with line items", () => {
+    const rows = buildInvoiceCsvRows(
+      [
+        {
+          id: "doc-1",
+          title: "INV-001",
+          counterparty: "Acme",
+          contextDate: "2024-01-31",
+          amountYen: 3000,
+          notes: "",
+          tags: [],
+          extracted: {},
+          lineItems: [
+            {
+              line_no: 1,
+              transaction_date: null,
+              description: "A",
+              quantity: "1",
+              unit: "",
+              unit_price: "1000",
+              amount: "1000",
+              tax_rate: "10",
+            },
+            {
+              line_no: 2,
+              transaction_date: null,
+              description: "B",
+              quantity: "1",
+              unit: "",
+              unit_price: "2000",
+              amount: "2000",
+              tax_rate: "10",
+            },
+          ],
+        },
+      ],
+      "summary"
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0][17]).toBe("");
+    expect(rows[0][19]).toBe("");
+  });
+
+  it("outputs one row per line item sorted by line_no in with_line_items mode", () => {
+    const rows = buildInvoiceCsvRows(
+      [
       {
         id: "doc-1",
         title: "INV-001",
@@ -70,7 +114,9 @@ describe("exportCsv", () => {
           },
         ],
       },
-    ]);
+    ],
+      "with_line_items"
+    );
     expect(rows).toHaveLength(2);
     expect(rows[0][17]).toBe("1");
     expect(rows[0][19]).toBe("A");

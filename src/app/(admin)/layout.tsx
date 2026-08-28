@@ -19,7 +19,7 @@ export default async function AdminLayout({
   return (
     <div className="flex min-h-screen flex-col bg-paper">
       <AppHeader variant="admin" />
-      <main className="flex flex-1">{children}</main>
+      <main className="flex min-w-0 flex-1 overflow-x-hidden">{children}</main>
       <SiteFooter fullWidth />
     </div>
   );

@@ -4,6 +4,7 @@ import { getViewerContext } from "@/lib/auth/getViewerContext";
 import {
   buildInvoiceCsvRowsWithHeader,
   encodeCsvWithBom,
+  type InvoiceCsvExportMode,
   type InvoiceExportDocument,
   type InvoiceExportLineItem,
 } from "@/lib/documents/exportCsv";
@@ -12,6 +13,7 @@ import { createServerSupabase } from "@/lib/supabase/server";
 type ExportBody = {
   documentType?: unknown;
   documentIds?: unknown;
+  exportMode?: unknown;
 };
 
 type DocumentRow = {
@@ -67,12 +69,19 @@ function exportFilenameTimestamp(now = new Date()): string {
   return `${parts.year}${parts.month}${parts.day}_${parts.hour}${parts.minute}${parts.second}`;
 }
 
-function parseExportBody(body: unknown): { documentType: string; documentIds: string[] } | null {
+function parseExportMode(value: unknown): InvoiceCsvExportMode {
+  if (value === "with_line_items") return "with_line_items";
+  return "summary";
+}
+
+function parseExportBody(
+  body: unknown
+): { documentType: string; documentIds: string[]; exportMode: InvoiceCsvExportMode } | null {
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
     return null;
   }
 
-  const { documentType, documentIds } = body as ExportBody;
+  const { documentType, documentIds, exportMode } = body as ExportBody;
   if (documentType !== "invoice") return null;
   if (!Array.isArray(documentIds) || documentIds.length === 0) return null;
   if (documentIds.length > 100) return null;
@@ -80,7 +89,11 @@ function parseExportBody(body: unknown): { documentType: string; documentIds: st
     return null;
   }
 
-  return { documentType, documentIds };
+  return {
+    documentType,
+    documentIds,
+    exportMode: parseExportMode(exportMode),
+  };
 }
 
 function toExportLineItem(row: LineItemRow): InvoiceExportLineItem {
@@ -183,7 +196,7 @@ export async function POST(req: Request) {
     .filter((row): row is DocumentRow => row !== undefined)
     .map((row) => toExportDocument(row, lineItemsByDocument.get(row.id) ?? []));
 
-  const csvRows = buildInvoiceCsvRowsWithHeader(documents);
+  const csvRows = buildInvoiceCsvRowsWithHeader(documents, parsed.exportMode);
   const bodyBuffer = encodeCsvWithBom(csvRows);
   const timestamp = exportFilenameTimestamp();
 

@@ -9,6 +9,9 @@ export interface InvoiceExportLineItem {
   tax_rate: string;
 }
 
+/** summary: 請求書1件=1行（明細列は空）。with_line_items: 明細1行=1CSV行 */
+export type InvoiceCsvExportMode = "summary" | "with_line_items";
+
 export interface InvoiceExportDocument {
   id: string;
   title: string;
@@ -72,48 +75,50 @@ function encodeCsvRow(fields: string[]): string {
   return fields.map(escapeCsvField).join(",");
 }
 
+const EMPTY_LINE_ITEM_COLUMNS = ["", "", "", "", "", "", "", ""] as const;
+
+function buildInvoiceHeaderColumns(doc: InvoiceExportDocument): string[] {
+  return [
+    doc.id,
+    doc.title,
+    stringField(doc.extracted.issue_date),
+    stringField(doc.extracted.due_date),
+    stringField(doc.extracted.recipient_name),
+    doc.counterparty,
+    stringField(doc.extracted.registration_number),
+    stringField(doc.extracted.subtotal),
+    stringField(doc.extracted.tax_10),
+    stringField(doc.extracted.tax_8),
+    stringField(doc.extracted.tax_total),
+    formatCsvValue(doc.amountYen),
+    stringField(doc.extracted.bank_info),
+    stringField(doc.extracted.remarks),
+    doc.notes,
+    doc.tags.join("|"),
+    formatCsvValue(doc.contextDate),
+  ];
+}
+
 export function buildInvoiceCsvRows(
-  documents: InvoiceExportDocument[]
+  documents: InvoiceExportDocument[],
+  mode: InvoiceCsvExportMode = "summary"
 ): string[][] {
   const rows: string[][] = [];
 
   for (const doc of documents) {
-    const headerColumns = [
-      doc.id,
-      doc.title,
-      stringField(doc.extracted.issue_date),
-      stringField(doc.extracted.due_date),
-      stringField(doc.extracted.recipient_name),
-      doc.counterparty,
-      stringField(doc.extracted.registration_number),
-      stringField(doc.extracted.subtotal),
-      stringField(doc.extracted.tax_10),
-      stringField(doc.extracted.tax_8),
-      stringField(doc.extracted.tax_total),
-      formatCsvValue(doc.amountYen),
-      stringField(doc.extracted.bank_info),
-      stringField(doc.extracted.remarks),
-      doc.notes,
-      doc.tags.join("|"),
-      formatCsvValue(doc.contextDate),
-    ];
+    const headerColumns = buildInvoiceHeaderColumns(doc);
+
+    if (mode === "summary") {
+      rows.push([...headerColumns, ...EMPTY_LINE_ITEM_COLUMNS]);
+      continue;
+    }
 
     const sortedLineItems = [...doc.lineItems].sort(
       (a, b) => a.line_no - b.line_no
     );
 
     if (sortedLineItems.length === 0) {
-      rows.push([
-        ...headerColumns,
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-      ]);
+      rows.push([...headerColumns, ...EMPTY_LINE_ITEM_COLUMNS]);
       continue;
     }
 
@@ -136,9 +141,10 @@ export function buildInvoiceCsvRows(
 }
 
 export function buildInvoiceCsvRowsWithHeader(
-  documents: InvoiceExportDocument[]
+  documents: InvoiceExportDocument[],
+  mode: InvoiceCsvExportMode = "summary"
 ): string[][] {
-  return [[...INVOICE_CSV_HEADERS], ...buildInvoiceCsvRows(documents)];
+  return [[...INVOICE_CSV_HEADERS], ...buildInvoiceCsvRows(documents, mode)];
 }
 
 export function encodeCsvWithBom(rows: string[][]): Buffer {
