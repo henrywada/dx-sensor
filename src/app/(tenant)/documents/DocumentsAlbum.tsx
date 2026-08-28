@@ -126,7 +126,6 @@ function NotesIndicator({ className }: { className?: string }) {
       className={className ?? "h-3.5 w-3.5 shrink-0 text-signal"}
       strokeWidth={1.75}
       aria-label="メモあり"
-      title="メモあり"
     />
   );
 }
