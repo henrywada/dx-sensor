@@ -82,6 +82,7 @@ export type RunMonitorTickDeps = {
   analyzeImages: (input: AnalyzeMonitorImagesInput) => Promise<VisionAnalyzeResult>;
   insertChangeEvent: (input: InsertMonitorChangeEventInput) => Promise<string>;
   logAnalysisRun: (input: LogAnalysisRunInput) => Promise<void>;
+  deleteCaptureIfUnreferenced: (captureId: string) => Promise<void>;
 };
 
 export async function runMonitorTick(
@@ -157,6 +158,7 @@ export async function runMonitorTick(
       emailQueued: false,
     });
     await deps.markCaptureProcessed(currCapture.id);
+    await deps.deleteCaptureIfUnreferenced(prevCapture.id);
     return {
       status: "processed",
       severity,
@@ -203,6 +205,10 @@ export async function runMonitorTick(
   });
 
   await deps.markCaptureProcessed(currCapture.id);
+  if (severity === "minor") {
+    // "notify" 判定はBefore/After証拠画像として保持するため削除しない。
+    await deps.deleteCaptureIfUnreferenced(prevCapture.id);
+  }
   return {
     status: "processed",
     severity,

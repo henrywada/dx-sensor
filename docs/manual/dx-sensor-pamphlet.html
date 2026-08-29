@@ -1,0 +1,648 @@
+<title>dx-sensor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;600;800&family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ground: #1B2333;
+    --ground-glow: #29365276;
+    --paper: #F3F5F4;
+    --paper-edge: #E3E7E6;
+    --ink: #1A2233;
+    --ink-soft: #4A5468;
+    --ink-faint: #8891A3;
+    --accent: #2C4A85;
+    --accent-soft: #DDE6F3;
+    --amber: #E3A23D;
+    --amber-soft: #FBEEDA;
+    --green: #4C9A6A;
+    --red: #D9563D;
+    --rule: #D7DBD9;
+    --font-display: "Shippori Mincho", "Hiragino Mincho ProN", "Yu Mincho", serif;
+    --font-body: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", Meiryo, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .desk {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 28px;
+    padding: 48px 20px 64px;
+    background:
+      radial-gradient(760px 420px at 50% -10%, var(--ground-glow), transparent 70%),
+      var(--ground);
+  }
+
+  .desk-label {
+    font-family: var(--font-body);
+    font-size: 0.72rem;
+    letter-spacing: 0.24em;
+    color: #9AA6C0;
+    text-transform: uppercase;
+  }
+
+  .sheet {
+    width: min(210mm, 100%);
+    min-height: 297mm;
+    background: var(--paper);
+    border: 1px solid var(--paper-edge);
+    box-shadow: 0 30px 60px -20px rgba(4, 8, 20, 0.55), 0 2px 0 rgba(255,255,255,0.4) inset;
+    padding: 15mm 16mm 12mm;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+
+  .masthead {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 30px;
+  }
+
+  .masthead .kicker {
+    font-size: 0.78rem;
+    letter-spacing: 0.18em;
+    color: var(--ink-soft);
+  }
+
+  .masthead .wordmark {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 1.3rem;
+    color: var(--accent);
+    letter-spacing: 0.01em;
+  }
+
+  /* ---------- PAGE 1 : HOOK ---------- */
+
+  .hero {
+    text-align: center;
+    max-width: 130mm;
+    margin: 0 auto;
+  }
+
+  .hero h1 {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: clamp(1.9rem, 4vw, 2.55rem);
+    line-height: 1.45;
+    margin: 0 0 18px;
+    text-wrap: balance;
+  }
+
+  .hero p {
+    font-size: 1.02rem;
+    line-height: 2;
+    color: var(--ink-soft);
+    margin: 0;
+  }
+
+  /* viewfinder hero graphic */
+  .viewfinder {
+    margin: 34px auto 8px;
+    display: flex;
+    justify-content: center;
+  }
+
+  .flow {
+    margin-top: 30px;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr auto 1fr;
+    align-items: start;
+    gap: 6px;
+  }
+
+  .flow-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 10px;
+    padding: 0 4px;
+  }
+
+  .flow-step .badge {
+    width: 60px;
+    height: 60px;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+
+  .flow-step .num {
+    position: absolute;
+    top: -8px;
+    right: -6px;
+    width: 20px;
+    height: 20px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 0.68rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-body);
+  }
+
+  .flow-step h3 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.08rem;
+    margin: 0;
+  }
+
+  .flow-step p {
+    font-size: 0.86rem;
+    line-height: 1.7;
+    color: var(--ink-soft);
+    margin: 0;
+    max-width: 30mm;
+  }
+
+  .flow-arrow {
+    display: flex;
+    align-items: center;
+    height: 60px;
+    color: var(--ink-faint);
+  }
+
+  .page1-foot {
+    margin-top: auto;
+    padding-top: 28px;
+  }
+
+  .pain-strip {
+    margin-top: 34px;
+    background: var(--amber-soft);
+    border-radius: 10px;
+    padding: 16px 20px;
+    display: flex;
+    gap: 14px;
+    align-items: center;
+  }
+
+  .pain-strip .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: var(--amber);
+    flex: none;
+  }
+
+  .pain-strip p {
+    margin: 0;
+    font-size: 0.9rem;
+    line-height: 1.8;
+    color: var(--ink-soft);
+  }
+
+  .pain-strip strong {
+    color: var(--ink);
+    font-weight: 700;
+  }
+
+  /* ---------- PAGE 2 : FEATURES ---------- */
+
+  .section-head {
+    text-align: left;
+    margin-bottom: 8px;
+  }
+
+  .section-head .eyebrow {
+    font-size: 0.76rem;
+    letter-spacing: 0.16em;
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  .section-head h2 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.7rem;
+    margin: 8px 0 6px;
+  }
+
+  .section-head p {
+    color: var(--ink-soft);
+    font-size: 0.95rem;
+    margin: 0;
+  }
+
+  .features {
+    margin-top: 26px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .feature {
+    display: grid;
+    grid-template-columns: 72px 1fr;
+    gap: 20px;
+    padding: 22px 0;
+    border-top: 1px solid var(--rule);
+  }
+
+  .feature:last-child {
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .feature .badge {
+    width: 56px;
+    height: 56px;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .feature h3 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.25rem;
+    margin: 2px 0 6px;
+  }
+
+  .feature .lede {
+    margin: 0 0 12px;
+    font-size: 0.92rem;
+    color: var(--ink-soft);
+    line-height: 1.85;
+    max-width: 130mm;
+  }
+
+  .feature ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .feature li {
+    font-size: 0.86rem;
+    color: var(--ink);
+    line-height: 1.6;
+    padding-left: 18px;
+    position: relative;
+  }
+
+  .feature li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.55em;
+    width: 7px;
+    height: 1.5px;
+    background: var(--accent);
+  }
+
+  .signal-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+  }
+
+  .signal-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.76rem;
+    color: var(--ink-soft);
+    background: #fff;
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    padding: 4px 10px 4px 8px;
+  }
+
+  .signal-chip i {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    display: inline-block;
+  }
+
+  .cta-band {
+    margin-top: 32px;
+    background: linear-gradient(135deg, var(--accent) 0%, #203764 100%);
+    border-radius: 14px;
+    padding: 26px 28px;
+    color: #F3F5F4;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+  }
+
+  .cta-band h3 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.3rem;
+    margin: 0 0 8px;
+  }
+
+  .cta-band p {
+    margin: 0;
+    font-size: 0.88rem;
+    line-height: 1.8;
+    color: #C9D3E8;
+    max-width: 105mm;
+  }
+
+  .cta-band .cta-icon {
+    flex: none;
+    width: 54px;
+    height: 54px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.12);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .page2-foot {
+    margin-top: auto;
+    padding-top: 22px;
+  }
+
+  .foot-rule {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px solid var(--rule);
+    padding-top: 10px;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    color: var(--ink-faint);
+  }
+
+  @media (max-width: 620px) {
+    .flow {
+      grid-template-columns: 1fr;
+    }
+    .flow-arrow {
+      transform: rotate(90deg);
+      height: 30px;
+      justify-content: center;
+    }
+    .feature {
+      grid-template-columns: 56px 1fr;
+    }
+    .cta-band {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+  }
+
+  @media print {
+    .desk {
+      background: #fff;
+      padding: 0;
+      gap: 0;
+    }
+    .desk-label { display: none; }
+    .sheet {
+      box-shadow: none;
+      border: none;
+      width: 210mm;
+      min-height: 297mm;
+      page-break-after: always;
+    }
+    @page {
+      size: A4;
+      margin: 0;
+    }
+  }
+</style>
+
+<div class="desk">
+  <div class="desk-label">A4 ・ 全2ページ ・ 印刷対応</div>
+
+  <!-- ============ PAGE 1 ============ -->
+  <section class="sheet">
+    <div class="masthead">
+      <span class="kicker">ご紹介パンフレット</span>
+      <span class="wordmark">dx-sensor</span>
+    </div>
+
+    <div class="hero">
+      <h1>その"変化"に、<br>気づいていますか？</h1>
+      <p>
+        駐車場の空き、棚の在庫、機械のランプ——<br class="wide-only">
+        毎日現場をぐるぐる見て回るのは大変です。<br>
+        dx-sensor は、置いたスマホのカメラが変化を見つけて、<br>
+        そっと教えてくれます。
+      </p>
+    </div>
+
+    <div class="viewfinder">
+      <svg width="280" height="150" viewBox="0 0 280 150" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="2枚の写真をAIが見くらべているイメージ">
+        <!-- corner brackets -->
+        <g stroke="#2C4A85" stroke-width="2.5" stroke-linecap="round">
+          <path d="M4 20 V4 H20" />
+          <path d="M260 4 H276 V20" />
+          <path d="M276 130 V146 H260" />
+          <path d="M20 146 H4 V130" />
+        </g>
+        <!-- left photo (before) -->
+        <rect x="46" y="34" width="72" height="82" rx="8" fill="#DDE6F3" stroke="#2C4A85" stroke-width="2"/>
+        <circle cx="82" cy="66" r="10" fill="none" stroke="#2C4A85" stroke-width="2"/>
+        <path d="M58 100 L76 80 L92 96 L104 82 L110 100 Z" fill="#2C4A85" opacity="0.35"/>
+        <!-- right photo (after, changed) -->
+        <rect x="162" y="34" width="72" height="82" rx="8" fill="#FBEEDA" stroke="#E3A23D" stroke-width="2"/>
+        <circle cx="198" cy="66" r="10" fill="none" stroke="#E3A23D" stroke-width="2"/>
+        <path d="M174 100 L192 74 L208 96 L220 78 L226 100 Z" fill="#E3A23D" opacity="0.45"/>
+        <circle cx="222" cy="42" r="9" fill="#E3A23D"/>
+        <path d="M222 38 V42 M222 45.4 V45.5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
+        <!-- compare arrows -->
+        <g stroke="#8891A3" stroke-width="1.6">
+          <path d="M126 68 H154" stroke-dasharray="3 4"/>
+          <path d="M150 63 L156 68 L150 73" fill="none"/>
+          <path d="M154 88 H126" stroke-dasharray="3 4"/>
+          <path d="M130 83 L124 88 L130 93" fill="none"/>
+        </g>
+      </svg>
+    </div>
+
+    <div class="flow">
+      <div class="flow-step">
+        <div class="badge">
+          <span class="num">1</span>
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+            <rect x="4" y="9" width="20" height="14" rx="2.5" stroke="#2C4A85" stroke-width="2"/>
+            <path d="M10 9 L12 6 H16 L18 9" stroke="#2C4A85" stroke-width="2" stroke-linejoin="round"/>
+            <circle cx="14" cy="16" r="4.2" stroke="#2C4A85" stroke-width="2"/>
+            <path d="M14 23 V27 M8 27 H20" stroke="#2C4A85" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <h3>置くだけ</h3>
+        <p>スマホを固定して、撮影をはじめるだけ。むずかしい設定は不要です。</p>
+      </div>
+
+      <div class="flow-arrow">
+        <svg width="26" height="14" viewBox="0 0 26 14" fill="none"><path d="M0 7 H22 M16 1 L22 7 L16 13" stroke="#B9C1D4" stroke-width="1.8" fill="none"/></svg>
+      </div>
+
+      <div class="flow-step">
+        <div class="badge">
+          <span class="num">2</span>
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+            <rect x="2" y="6" width="10" height="10" rx="2" stroke="#2C4A85" stroke-width="2"/>
+            <rect x="16" y="12" width="10" height="10" rx="2" stroke="#2C4A85" stroke-width="2"/>
+            <path d="M12 11 L16 17" stroke="#2C4A85" stroke-width="1.6" stroke-dasharray="2 2.4"/>
+          </svg>
+        </div>
+        <h3>見くらべる</h3>
+        <p>決めた間隔で自動撮影。AI が前回の写真とそっと見くらべます。</p>
+      </div>
+
+      <div class="flow-arrow">
+        <svg width="26" height="14" viewBox="0 0 26 14" fill="none"><path d="M0 7 H22 M16 1 L22 7 L16 13" stroke="#B9C1D4" stroke-width="1.8" fill="none"/></svg>
+      </div>
+
+      <div class="flow-step">
+        <div class="badge">
+          <span class="num">3</span>
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+            <circle cx="14" cy="8" r="4" fill="#4C9A6A"/>
+            <circle cx="14" cy="14" r="4" fill="#E3A23D"/>
+            <circle cx="14" cy="20" r="4" fill="#D9563D"/>
+          </svg>
+        </div>
+        <h3>気づく</h3>
+        <p>変化の大きさを色分けし、大きな変化のときだけ知らせてくれます。</p>
+      </div>
+    </div>
+
+    <div class="pain-strip">
+      <span class="dot"></span>
+      <p><strong>「見に行かなくても、わかる」</strong>——それが dx-sensor です。写真は自動で記録として残るので、あとから見返すのも簡単です。</p>
+    </div>
+
+    <div class="page1-foot">
+      <div class="foot-rule">
+        <span>スマホ定点観測 × AI レポート</span>
+        <span>1 / 2</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PAGE 2 ============ -->
+  <section class="sheet">
+    <div class="masthead">
+      <span class="kicker">ご紹介パンフレット</span>
+      <span class="wordmark">dx-sensor</span>
+    </div>
+
+    <div class="section-head">
+      <span class="eyebrow">できること</span>
+      <h2>現場の"見る"を、もっと手軽に。</h2>
+      <p>使い方はかんたん3つ。目的にあわせて、必要な機能だけ使えます。</p>
+    </div>
+
+    <div class="features">
+      <div class="feature">
+        <div class="badge">
+          <svg width="26" height="26" viewBox="0 0 28 28" fill="none">
+            <rect x="4" y="9" width="20" height="14" rx="2.5" stroke="#2C4A85" stroke-width="2"/>
+            <path d="M10 9 L12 6 H16 L18 9" stroke="#2C4A85" stroke-width="2" stroke-linejoin="round"/>
+            <circle cx="14" cy="16" r="4.2" stroke="#2C4A85" stroke-width="2"/>
+            <path d="M14 23 V27 M8 27 H20" stroke="#2C4A85" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div>
+          <h3>定点監視カメラ — スマホが、現場の見張り番に。</h3>
+          <p class="lede">三脚などでスマホを固定して撮影を始めるだけ。設定した間隔で自動的に写真を撮り、前回との違いを AI がチェックします。変化がなければ静かに記録するだけ、大きな変化があったときだけ知らせます。</p>
+          <ul>
+            <li>駐車場の空き、機械の稼働ランプ、棚の欠品、工事の進み具合など、使い道はいろいろ</li>
+            <li>撮りためた写真は自動でアルバムに。あとから見返しも簡単</li>
+          </ul>
+          <div class="signal-row">
+            <span class="signal-chip"><i style="background:#4C9A6A"></i>変化なし</span>
+            <span class="signal-chip"><i style="background:#E3A23D"></i>軽い変化</span>
+            <span class="signal-chip"><i style="background:#D9563D"></i>要チェック</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="feature">
+        <div class="badge">
+          <svg width="26" height="26" viewBox="0 0 28 28" fill="none">
+            <rect x="3" y="6" width="22" height="17" rx="2.5" stroke="#2C4A85" stroke-width="2"/>
+            <circle cx="9.5" cy="12" r="2.1" stroke="#2C4A85" stroke-width="1.8"/>
+            <path d="M5 21 L12 14 L17 18 L23 12" stroke="#2C4A85" stroke-width="1.8" fill="none" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div>
+          <h3>写真レポート — 「今の現場」を、ひと言添えて記録。</h3>
+          <p class="lede">件名を選んで写真を撮るだけ。日々の作業報告や現場の様子が、きれいに記録・共有できます。送った写真は自動でアルバムにまとまるので、探す手間もかかりません。</p>
+          <ul>
+            <li>よく使う件名は登録しておいて、ワンタップで選択</li>
+            <li>撮影 → 確認 → 送信が、その場ですぐ完結</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="feature">
+        <div class="badge">
+          <svg width="26" height="26" viewBox="0 0 28 28" fill="none">
+            <path d="M3 9 L3 22 A2 2 0 0 0 5 24 L23 24 A2 2 0 0 0 25 22 L25 11 A2 2 0 0 0 23 9 L14 9 L12 6 L5 6 A2 2 0 0 0 3 8 Z" stroke="#2C4A85" stroke-width="2" stroke-linejoin="round"/>
+            <rect x="8" y="13" width="9" height="6" rx="1" stroke="#2C4A85" stroke-width="1.6"/>
+          </svg>
+        </div>
+        <div>
+          <h3>文書ホルダー — 名刺も請求書も、撮るだけでデータに。</h3>
+          <p class="lede">名刺や請求書をカメラで撮影するだけで、AI が名前や金額などの情報を自動で読み取ってくれます。内容はその場で確認・修正できるので、安心して保存できます。</p>
+          <ul>
+            <li>名刺は表・裏、請求書は複数ページもまとめて撮影OK</li>
+            <li>あとから名前・日付・金額などで検索・絞り込みができる</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="cta-band">
+      <div>
+        <h3>まずはスマホ1台、置くだけから。</h3>
+        <p>むずかしい設定はいりません。カメラを固定して、あとは dx-sensor におまかせください。</p>
+      </div>
+      <div class="cta-icon">
+        <svg width="26" height="26" viewBox="0 0 28 28" fill="none">
+          <path d="M14 4 V20 M7 13 L14 20 L21 13" stroke="#F3F5F4" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M5 24 H23" stroke="#F3F5F4" stroke-width="2.2" stroke-linecap="round"/>
+        </svg>
+      </div>
+    </div>
+
+    <div class="page2-foot">
+      <div class="foot-rule">
+        <span>スマホ定点観測 × AI レポート</span>
+        <span>2 / 2</span>
+      </div>
+    </div>
+  </section>
+</div>

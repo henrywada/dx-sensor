@@ -28,6 +28,7 @@ function createDeps(overrides: Partial<RunMonitorTickDeps> = {}): RunMonitorTick
     analyzeImages: vi.fn(async () => ({ text: "変化があります", raw: {} })),
     insertChangeEvent: vi.fn(async () => "event-id"),
     logAnalysisRun: vi.fn(async () => undefined),
+    deleteCaptureIfUnreferenced: vi.fn(async () => undefined),
     ...overrides,
   };
 }
@@ -47,6 +48,7 @@ describe("runMonitorTick", () => {
     });
     expect(deps.markCaptureProcessed).not.toHaveBeenCalled();
     expect(deps.analyzeImages).not.toHaveBeenCalled();
+    expect(deps.deleteCaptureIfUnreferenced).not.toHaveBeenCalled();
   });
 
   it("marks first capture as baseline when prevCaptureId is null", async () => {
@@ -73,6 +75,7 @@ describe("runMonitorTick", () => {
     expect(deps.markCaptureProcessed).toHaveBeenCalledWith("curr-capture");
     expect(deps.downloadCapture).not.toHaveBeenCalled();
     expect(deps.insertChangeEvent).not.toHaveBeenCalled();
+    expect(deps.deleteCaptureIfUnreferenced).not.toHaveBeenCalled();
   });
 
   it("marks processed and logs skip for tiny diffs", async () => {
@@ -111,6 +114,38 @@ describe("runMonitorTick", () => {
       })
     );
     expect(deps.logAnalysisRun).not.toHaveBeenCalled();
+    expect(deps.deleteCaptureIfUnreferenced).toHaveBeenCalledWith("prev-capture");
+  });
+
+  it("analyzes and deletes the previous capture for minor (non-notified) diffs", async () => {
+    const deps = createDeps({
+      getNextUnprocessedCapture: vi.fn(async () => ({
+        id: "curr-capture",
+        storagePath: "tenant/day/curr.jpg",
+      })),
+      getCaptureById: vi.fn(async () => ({
+        id: "prev-capture",
+        storagePath: "tenant/day/prev.jpg",
+      })),
+      diffScore: vi.fn(async () => 0.05),
+      analyzeImages: vi.fn(async () => ({
+        text: "軽微な変化があります",
+        raw: {},
+      })),
+    });
+
+    const result = await runMonitorTick(REQUEST, deps);
+
+    expect(result).toMatchObject({
+      status: "processed",
+      severity: "minor",
+      eventId: "event-id",
+    });
+    expect(deps.insertChangeEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ severity: "minor" })
+    );
+    expect(deps.markCaptureProcessed).toHaveBeenCalledWith("curr-capture");
+    expect(deps.deleteCaptureIfUnreferenced).toHaveBeenCalledWith("prev-capture");
   });
 
   it("analyzes, logs cost, and queues email for notify diffs with an email", async () => {
@@ -165,5 +200,6 @@ describe("runMonitorTick", () => {
       })
     );
     expect(deps.markCaptureProcessed).toHaveBeenCalledWith("curr-capture");
+    expect(deps.deleteCaptureIfUnreferenced).not.toHaveBeenCalled();
   });
 });
