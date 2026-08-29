@@ -644,6 +644,30 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
             </div>
           </div>
 
+          {!settingsLoading && (
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={monitoring ? handleStopMonitoring : handleStartMonitoring}
+                className={`inline-flex min-w-44 items-center justify-center gap-2 rounded-md px-5 py-3 text-sm font-medium text-white transition ${
+                  monitoring ? "bg-alert hover:bg-alert/90" : "bg-signal hover:bg-signal/90"
+                }`}
+              >
+                {monitoring ? (
+                  <>
+                    <Square className="h-4 w-4" strokeWidth={1.75} />
+                    監視を停止
+                  </>
+                ) : (
+                  <>
+                    <Play className="h-4 w-4" strokeWidth={1.75} />
+                    監視の開始
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+
           {settingsLoading ? (
             <p className="mt-6 text-sm text-ink-soft">読み込み中...</p>
           ) : (
@@ -727,28 +751,6 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
                   className="ml-auto rounded-md border border-line bg-white px-4 py-2 text-sm font-medium text-ink transition hover:border-signal/50 disabled:opacity-50"
                 >
                   {settingsSaving ? "保存中..." : "設定を保存"}
-                </button>
-              </div>
-
-              <div className="flex justify-center pt-2">
-                <button
-                  type="button"
-                  onClick={monitoring ? handleStopMonitoring : handleStartMonitoring}
-                  className={`inline-flex min-w-44 items-center justify-center gap-2 rounded-md px-5 py-3 text-sm font-medium text-white transition ${
-                    monitoring ? "bg-alert hover:bg-alert/90" : "bg-signal hover:bg-signal/90"
-                  }`}
-                >
-                  {monitoring ? (
-                    <>
-                      <Square className="h-4 w-4" strokeWidth={1.75} />
-                      監視を停止
-                    </>
-                  ) : (
-                    <>
-                      <Play className="h-4 w-4" strokeWidth={1.75} />
-                      監視の開始
-                    </>
-                  )}
                 </button>
               </div>
             </div>
