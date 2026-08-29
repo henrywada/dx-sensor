@@ -18,7 +18,7 @@ interface CaptureAutoFormProps {
 type CameraState = "starting" | "ready" | "denied" | "unsupported" | "error";
 type UploadStatus = "idle" | "uploading" | "done" | "error";
 
-const INTERVAL_OPTIONS_SEC = [10, 15, 20, 30, 60, 120, 180] as const;
+const INTERVAL_OPTIONS_SEC = [5, 10, 15, 20, 30, 60, 120, 180] as const;
 const MOUNT_STORAGE_KEY = "dx-sensor.capture-auto.mount";
 const INVERT_STORAGE_KEY = "dx-sensor.capture-auto.invert-rotation";
 
@@ -45,7 +45,7 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>("idle");
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [intervalSec, setIntervalSec] = useState<number>(10);
+  const [intervalSec, setIntervalSec] = useState<number>(5);
   const [autoRunning, setAutoRunning] = useState(false);
   const [savedCount, setSavedCount] = useState(0);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);

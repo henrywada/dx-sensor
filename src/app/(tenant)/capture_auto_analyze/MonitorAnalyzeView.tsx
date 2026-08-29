@@ -34,9 +34,10 @@ type MonitorAnalyzeViewProps = {
   userId: string;
 };
 
+/** "waiting" は画面上だけの一時的な表示用（未処理画像なし）で、DBには保存されない。 */
 type MonitorEvent = {
   id: string;
-  severity: MonitorSeverity;
+  severity: MonitorSeverity | "waiting";
   diff_score: number | null;
   ai_summary: string | null;
   email_queued: boolean;
@@ -46,6 +47,23 @@ type MonitorEvent = {
   prev_capture_no?: number | null;
   curr_capture_no?: number | null;
 };
+
+const WAITING_EVENT_ID = "client-waiting-placeholder";
+
+function makeWaitingEvent(): MonitorEvent {
+  return {
+    id: WAITING_EVENT_ID,
+    severity: "waiting",
+    diff_score: null,
+    ai_summary: "処理する画像がありません",
+    email_queued: false,
+    created_at: new Date().toISOString(),
+    prev_capture_id: null,
+    curr_capture_id: null,
+    prev_capture_no: null,
+    curr_capture_no: null,
+  };
+}
 
 type EventCompareModal = {
   prevNo: number | null;
@@ -94,20 +112,21 @@ function formatTimestamp(iso: string): string {
   });
 }
 
-function severityLabel(severity: MonitorSeverity | null): string {
+function severityLabel(severity: MonitorSeverity | "waiting" | null): string {
   if (severity === "notify") return "通知対象";
   if (severity === "minor") return "軽微な変化";
   if (severity === "skip") return "変化なし";
   return "待機中";
 }
 
-function severityColor(severity: MonitorSeverity): string {
+function severityColor(severity: MonitorSeverity | "waiting"): string {
   if (severity === "notify") return "bg-red-600";
   if (severity === "minor") return "bg-yellow-400";
+  if (severity === "waiting") return "bg-ink-soft";
   return "bg-emerald-500";
 }
 
-function isChangeEvent(severity: MonitorSeverity): boolean {
+function isChangeEvent(severity: MonitorSeverity | "waiting"): boolean {
   return severity === "minor" || severity === "notify";
 }
 
@@ -439,7 +458,13 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
       if (result.currCaptureId) {
         lastCurrCaptureIdRef.current = result.currCaptureId;
       }
-      if (result.eventId || result.status === "processed" || result.status === "baseline") {
+      if (result.status === "waiting") {
+        // DBには保存しない、画面上だけの一時的な表示（既存の待機中プレースホルダーは置き換える）。
+        setEvents((prev) => [
+          makeWaitingEvent(),
+          ...prev.filter((event) => event.id !== WAITING_EVENT_ID),
+        ]);
+      } else if (result.eventId || result.status === "processed" || result.status === "baseline") {
         void loadEvents();
       }
       void loadImages();
