@@ -168,8 +168,9 @@ export async function runMonitorTick(
       currCaptureId: currCapture.id,
       prevCaptureNo,
       currCaptureNo,
-      // 削除済みなら署名URLは実体のない壊れたリンクになるためnullを返す。
-      prevSignedUrl: prevDeleted ? null : prevSignedUrl,
+      // 削除済みなら署名URLは実体のない壊れたリンクになるため、
+      // 既にダウンロード済みのバイト列をdata URIとして埋め込む。
+      prevSignedUrl: prevDeleted ? toDataUri(prevFile) : prevSignedUrl,
       currSignedUrl,
       summary: null,
       eventId,
@@ -220,10 +221,13 @@ export async function runMonitorTick(
     currCaptureId: currCapture.id,
     prevCaptureNo,
     currCaptureNo,
-    // 削除済みなら署名URLは実体のない壊れたリンクになるためnullを返す。
-    prevSignedUrl: prevDeleted ? null : prevSignedUrl,
+    prevSignedUrl: prevDeleted ? toDataUri(prevFile) : prevSignedUrl,
     currSignedUrl,
     summary: analysis.text,
     eventId,
   };
+}
+
+function toDataUri(file: DownloadedCapture): string {
+  return `data:${file.mimeType};base64,${file.buffer.toString("base64")}`;
 }

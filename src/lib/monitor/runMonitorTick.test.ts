@@ -101,8 +101,9 @@ describe("runMonitorTick", () => {
       diffScore: 0.01,
       prevCaptureId: "prev-capture",
       currCaptureId: "curr-capture",
-      // 削除された前回画像の署名URLはそのまま返すと壊れたリンクになるためnull。
-      prevSignedUrl: null,
+      // 削除された前回画像は、署名URL（壊れたリンクになる）の代わりに
+      // 既にダウンロード済みのバイト列をdata URIとして埋め込んで返す。
+      prevSignedUrl: `data:image/jpeg;base64,${Buffer.from("image").toString("base64")}`,
       currSignedUrl: "signed:tenant/day/curr.jpg",
       eventId: "skip-event-id",
     });
@@ -165,7 +166,7 @@ describe("runMonitorTick", () => {
       status: "processed",
       severity: "minor",
       eventId: "event-id",
-      prevSignedUrl: null,
+      prevSignedUrl: `data:image/jpeg;base64,${Buffer.from("image").toString("base64")}`,
     });
     expect(deps.insertChangeEvent).toHaveBeenCalledWith(
       expect.objectContaining({ severity: "minor" })
