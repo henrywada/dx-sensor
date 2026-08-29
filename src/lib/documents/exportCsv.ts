@@ -270,3 +270,105 @@ export function buildPurchaseOrderCsvRowsWithHeader(
 ): string[][] {
   return [[...PURCHASE_ORDER_CSV_HEADERS], ...buildPurchaseOrderCsvRows(documents, mode)];
 }
+
+export interface ReceiptExportDocument {
+  id: string;
+  title: string;
+  counterparty: string;
+  contextDate: string | null;
+  amountYen: number | null;
+  notes: string;
+  tags: string[];
+  extracted: Record<string, string>;
+}
+
+export type ReceiptExpenseExportDocument = ReceiptExportDocument;
+export type ReceiptQualifiedExportDocument = ReceiptExportDocument;
+
+/** CSV 1行目の列名（領収書・社内経費用 13列） */
+export const RECEIPT_EXPENSE_CSV_HEADERS = [
+  "領収書ID",
+  "日付",
+  "金額（税込）",
+  "支払方法",
+  "勘定科目",
+  "発行者",
+  "利用目的・摘要",
+  "参加者",
+  "人数",
+  "部門/プロジェクトコード",
+  "申請者",
+  "承認者",
+  "メモ",
+  "タグ",
+] as const;
+
+export function buildReceiptExpenseCsvRows(
+  documents: ReceiptExpenseExportDocument[]
+): string[][] {
+  return documents.map((doc) => [
+    doc.id,
+    stringField(doc.extracted.transaction_date),
+    stringField(doc.extracted.amount),
+    stringField(doc.extracted.payment_method),
+    stringField(doc.extracted.expense_category),
+    stringField(doc.extracted.issuer_name),
+    stringField(doc.extracted.purpose),
+    stringField(doc.extracted.participants),
+    stringField(doc.extracted.participant_count),
+    stringField(doc.extracted.department_code),
+    stringField(doc.extracted.applicant),
+    stringField(doc.extracted.approver),
+    doc.notes,
+    doc.tags.join("|"),
+  ]);
+}
+
+export function buildReceiptExpenseCsvRowsWithHeader(
+  documents: ReceiptExpenseExportDocument[]
+): string[][] {
+  return [[...RECEIPT_EXPENSE_CSV_HEADERS], ...buildReceiptExpenseCsvRows(documents)];
+}
+
+/** CSV 1行目の列名（領収書・インボイス制度対応用 13列） */
+export const RECEIPT_QUALIFIED_CSV_HEADERS = [
+  "領収書ID",
+  "発行者名",
+  "登録番号",
+  "取引年月日",
+  "取引内容",
+  "10%対象合計額",
+  "10%消費税額",
+  "8%対象合計額",
+  "8%消費税額",
+  "合計金額",
+  "交付を受ける者の氏名",
+  "メモ",
+  "タグ",
+] as const;
+
+export function buildReceiptQualifiedCsvRows(
+  documents: ReceiptQualifiedExportDocument[]
+): string[][] {
+  return documents.map((doc) => [
+    doc.id,
+    stringField(doc.extracted.issuer_name),
+    stringField(doc.extracted.registration_number),
+    stringField(doc.extracted.transaction_date),
+    stringField(doc.extracted.transaction_details),
+    stringField(doc.extracted.subtotal_10),
+    stringField(doc.extracted.tax_10),
+    stringField(doc.extracted.subtotal_8),
+    stringField(doc.extracted.tax_8),
+    stringField(doc.extracted.total),
+    stringField(doc.extracted.recipient_name),
+    doc.notes,
+    doc.tags.join("|"),
+  ]);
+}
+
+export function buildReceiptQualifiedCsvRowsWithHeader(
+  documents: ReceiptQualifiedExportDocument[]
+): string[][] {
+  return [[...RECEIPT_QUALIFIED_CSV_HEADERS], ...buildReceiptQualifiedCsvRows(documents)];
+}

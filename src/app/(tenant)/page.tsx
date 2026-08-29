@@ -7,6 +7,7 @@ import {
   FolderOpen,
   ImagePlus,
   Images,
+  Receipt,
 } from "lucide-react";
 import { AppCard, type AppCardProps } from "@/components/ui/AppCard";
 
@@ -94,6 +95,18 @@ const categories: Category[] = [
         title: "発注書ホルダー",
         description: "保存した発注書を検索・編集し、CSVでエクスポートします。",
         href: "/documents?type=purchase_order",
+      },
+      {
+        icon: Receipt,
+        title: "領収書を撮る",
+        description: "領収書を撮影し、区分（社内経費／インボイス制度対応）を選んでAIで読み取った内容を確認して保存します。",
+        href: "/documents/new?type=receipt",
+      },
+      {
+        icon: FolderOpen,
+        title: "領収書ホルダー",
+        description: "保存した領収書を区分ごとに検索・編集し、CSVでエクスポートします。",
+        href: "/documents?type=receipt",
       },
     ],
   },

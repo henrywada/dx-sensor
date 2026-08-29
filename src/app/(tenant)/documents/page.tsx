@@ -4,11 +4,13 @@ import { getViewerContext } from "@/lib/auth/getViewerContext";
 import { DocumentsAlbum } from "./DocumentsAlbum";
 import { InvoiceAlbum } from "./InvoiceAlbum";
 import { PurchaseOrderAlbum } from "./PurchaseOrderAlbum";
+import { ReceiptAlbum } from "./ReceiptAlbum";
 
 interface DocumentsPageProps {
   searchParams?: {
     type?: string;
     open?: string;
+    mode?: string;
   };
 }
 
@@ -55,6 +57,17 @@ export default async function DocumentsPage({ searchParams }: DocumentsPageProps
         documentType={documentType}
         userId={viewer.userId}
         initialOpenId={searchParams?.open ?? null}
+      />
+    );
+  }
+
+  if (documentType === "receipt") {
+    return (
+      <ReceiptAlbum
+        documentType={documentType}
+        userId={viewer.userId}
+        initialOpenId={searchParams?.open ?? null}
+        initialMode={searchParams?.mode === "qualified_invoice" ? "qualified_invoice" : "expense"}
       />
     );
   }

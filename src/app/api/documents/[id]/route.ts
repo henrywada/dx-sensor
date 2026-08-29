@@ -5,7 +5,7 @@ import { canMutateDocument } from "@/lib/documents/canMutateDocument";
 import { findDuplicate } from "@/lib/documents/findDuplicate";
 import { lineItemDraftToDbRow } from "@/lib/documents/lineItems";
 import type { LineItemDraft } from "@/lib/documents/pluginTypes";
-import { getDocumentPlugin } from "@/lib/documents/registry";
+import { resolveDocumentPlugin } from "@/lib/documents/resolvePlugin";
 import { BUCKET } from "@/lib/documents/storagePaths";
 import { createServerSupabase } from "@/lib/supabase/server";
 
@@ -30,6 +30,7 @@ type DocumentRow = {
   id: string;
   owner_user_id: string;
   document_type: string;
+  document_mode: string | null;
   company_visible: boolean;
   title: string;
   counterparty: string;
@@ -213,7 +214,7 @@ async function loadDocument(
   const { data: row, error } = await supabase
     .from("captured_documents")
     .select(
-      "id, owner_user_id, document_type, company_visible, title, counterparty, context_date, amount_yen, notes, tags, extracted, raw_ocr, created_at, updated_at"
+      "id, owner_user_id, document_type, document_mode, company_visible, title, counterparty, context_date, amount_yen, notes, tags, extracted, raw_ocr, created_at, updated_at"
     )
     .eq("id", id)
     .eq("tenant_id", tenantId)
@@ -253,6 +254,7 @@ async function serializeDocument(
   return {
     id: row.id,
     documentType: row.document_type,
+    documentMode: row.document_mode,
     ownerUserId: row.owner_user_id,
     companyVisible: row.company_visible,
     title: row.title,
@@ -370,10 +372,14 @@ export async function PATCH(req: Request, { params }: RouteContext) {
     return NextResponse.json({ error: "文書を更新する権限がありません" }, { status: 403 });
   }
 
-  const plugin = getDocumentPlugin(prepared.row.document_type);
-  if (!plugin) {
+  const resolved = resolveDocumentPlugin(
+    prepared.row.document_type,
+    prepared.row.document_mode
+  );
+  if (!resolved) {
     return NextResponse.json({ error: "文書種別が不正です" }, { status: 400 });
   }
+  const plugin = resolved.plugin;
 
   let rawBody: unknown;
   try {
@@ -416,12 +422,17 @@ export async function PATCH(req: Request, { params }: RouteContext) {
     patch.companyVisible ?? prepared.row.company_visible;
 
   if (!prepared.row.company_visible && nextCompanyVisible) {
-    const { data: rows, error } = await prepared.supabase
+    let dupQuery = prepared.supabase
       .from("captured_documents")
       .select("id, owner_user_id, company_visible, extracted, updated_at")
       .eq("tenant_id", prepared.tenant.tenantId)
-      .eq("document_type", plugin.id)
-      .or(`owner_user_id.eq.${prepared.viewer.userId},company_visible.eq.true`);
+      .eq("document_type", plugin.id);
+    if (prepared.row.document_mode !== null) {
+      dupQuery = dupQuery.eq("document_mode", prepared.row.document_mode);
+    }
+    const { data: rows, error } = await dupQuery.or(
+      `owner_user_id.eq.${prepared.viewer.userId},company_visible.eq.true`
+    );
 
     if (error) {
       console.error("captured_documents duplicate fetch failed", error);
@@ -476,7 +487,7 @@ export async function PATCH(req: Request, { params }: RouteContext) {
     .eq("id", prepared.row.id)
     .eq("tenant_id", prepared.tenant.tenantId)
     .select(
-      "id, owner_user_id, document_type, company_visible, title, counterparty, context_date, amount_yen, notes, tags, extracted, raw_ocr, created_at, updated_at"
+      "id, owner_user_id, document_type, document_mode, company_visible, title, counterparty, context_date, amount_yen, notes, tags, extracted, raw_ocr, created_at, updated_at"
     )
     .maybeSingle();
 

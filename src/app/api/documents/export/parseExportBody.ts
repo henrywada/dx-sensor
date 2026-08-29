@@ -2,10 +2,13 @@ import type {
   InvoiceCsvExportMode,
   InvoiceExportDocument,
   InvoiceExportLineItem,
+  ReceiptExportDocument,
 } from "@/lib/documents/exportCsv";
+import { getDocumentPlugin } from "@/lib/documents/registry";
 
 export type ExportBody = {
   documentType?: unknown;
+  documentMode?: unknown;
   documentIds?: unknown;
   exportMode?: unknown;
 };
@@ -63,21 +66,36 @@ export function exportFilenameTimestamp(now = new Date()): string {
   return `${parts.year}${parts.month}${parts.day}_${parts.hour}${parts.minute}${parts.second}`;
 }
 
-export const EXPORTABLE_TYPES = new Set(["invoice", "purchase_order"]);
+export const EXPORTABLE_TYPES = new Set(["invoice", "purchase_order", "receipt"]);
 
 function parseExportMode(value: unknown): InvoiceCsvExportMode {
   if (value === "with_line_items") return "with_line_items";
   return "summary";
 }
 
-export function parseExportBody(
-  body: unknown
-): { documentType: string; documentIds: string[]; exportMode: InvoiceCsvExportMode } | null {
+function parseDocumentMode(documentType: string, value: unknown): string | null | undefined {
+  const plugin = getDocumentPlugin(documentType);
+  if (!plugin?.modes || plugin.modes.length === 0) {
+    return null;
+  }
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const mode = plugin.modes.find((m) => m.id === value);
+  return mode ? mode.id : undefined;
+}
+
+export function parseExportBody(body: unknown): {
+  documentType: string;
+  documentMode: string | null;
+  documentIds: string[];
+  exportMode: InvoiceCsvExportMode;
+} | null {
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
     return null;
   }
 
-  const { documentType, documentIds, exportMode } = body as ExportBody;
+  const { documentType, documentMode, documentIds, exportMode } = body as ExportBody;
   if (typeof documentType !== "string" || !EXPORTABLE_TYPES.has(documentType)) return null;
   if (!Array.isArray(documentIds) || documentIds.length === 0) return null;
   if (documentIds.length > 100) return null;
@@ -85,8 +103,12 @@ export function parseExportBody(
     return null;
   }
 
+  const resolvedMode = parseDocumentMode(documentType, documentMode);
+  if (resolvedMode === undefined) return null;
+
   return {
     documentType,
+    documentMode: resolvedMode,
     documentIds,
     exportMode: parseExportMode(exportMode),
   };
@@ -119,5 +141,18 @@ export function toExportDocument(
     tags: row.tags ?? [],
     extracted: asExtracted(row.extracted),
     lineItems: lineItems.map(toExportLineItem),
+  };
+}
+
+export function toReceiptExportDocument(row: DocumentRow): ReceiptExportDocument {
+  return {
+    id: row.id,
+    title: row.title,
+    counterparty: row.counterparty,
+    contextDate: row.context_date,
+    amountYen: parseAmountYen(row.amount_yen),
+    notes: row.notes ?? "",
+    tags: row.tags ?? [],
+    extracted: asExtracted(row.extracted),
   };
 }

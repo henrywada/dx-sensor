@@ -4,9 +4,15 @@ import {
   buildInvoiceCsvRowsWithHeader,
   buildPurchaseOrderCsvRows,
   buildPurchaseOrderCsvRowsWithHeader,
+  buildReceiptExpenseCsvRows,
+  buildReceiptExpenseCsvRowsWithHeader,
+  buildReceiptQualifiedCsvRows,
+  buildReceiptQualifiedCsvRowsWithHeader,
   encodeCsvWithBom,
   INVOICE_CSV_HEADERS,
   PURCHASE_ORDER_CSV_HEADERS,
+  RECEIPT_EXPENSE_CSV_HEADERS,
+  RECEIPT_QUALIFIED_CSV_HEADERS,
 } from "./exportCsv";
 
 describe("exportCsv", () => {
@@ -334,5 +340,131 @@ describe("purchase order exportCsv", () => {
       },
     ]);
     expect(rows[0]).toHaveLength(26);
+  });
+});
+
+describe("receipt expense exportCsv", () => {
+  it("outputs exactly one row per document", () => {
+    const rows = buildReceiptExpenseCsvRows([
+      {
+        id: "doc-1",
+        title: "打合せ",
+        counterparty: "サンプル商店",
+        contextDate: "2026-08-01",
+        amountYen: 1200,
+        notes: "memo",
+        tags: ["tag1"],
+        extracted: {
+          transaction_date: "2026-08-01",
+          amount: "1200",
+          payment_method: "現金",
+          expense_category: "会議費",
+          issuer_name: "サンプル商店",
+          purpose: "打合せ",
+          participants: "山田,佐藤",
+          participant_count: "2",
+          department_code: "PJ-001",
+          applicant: "山田",
+          approver: "佐藤",
+        },
+      },
+    ]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0][0]).toBe("doc-1");
+  });
+
+  it("outputs the RECEIPT_EXPENSE_CSV_HEADERS as the first row", () => {
+    const rows = buildReceiptExpenseCsvRowsWithHeader([
+      {
+        id: "doc-1",
+        title: "打合せ",
+        counterparty: "サンプル商店",
+        contextDate: null,
+        amountYen: null,
+        notes: "",
+        tags: [],
+        extracted: {},
+      },
+    ]);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toEqual([...RECEIPT_EXPENSE_CSV_HEADERS]);
+  });
+
+  it("escapes formula-injection-prone leading characters", () => {
+    const rows = buildReceiptExpenseCsvRows([
+      {
+        id: "doc-1",
+        title: "打合せ",
+        counterparty: "",
+        contextDate: null,
+        amountYen: null,
+        notes: "",
+        tags: [],
+        extracted: { issuer_name: "=CMD()" },
+      },
+    ]);
+    const csv = encodeCsvWithBom(rows).toString("utf-8");
+    expect(csv).toContain("'=CMD()");
+  });
+});
+
+describe("receipt qualified_invoice exportCsv", () => {
+  it("outputs the 8%/10% breakdown as individual columns", () => {
+    const rows = buildReceiptQualifiedCsvRows([
+      {
+        id: "doc-1",
+        title: "T1234567890123",
+        counterparty: "サンプル株式会社",
+        contextDate: "2026-08-01",
+        amountYen: 56080,
+        notes: "",
+        tags: [],
+        extracted: {
+          issuer_name: "サンプル株式会社",
+          registration_number: "T1234567890123",
+          transaction_date: "2026-08-01",
+          transaction_details: "雑貨代",
+          subtotal_10: "50000",
+          tax_10: "5000",
+          subtotal_8: "1000",
+          tax_8: "80",
+          total: "56080",
+          recipient_name: "〇〇 〇〇",
+        },
+      },
+    ]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toEqual([
+      "doc-1",
+      "サンプル株式会社",
+      "T1234567890123",
+      "2026-08-01",
+      "雑貨代",
+      "50000",
+      "5000",
+      "1000",
+      "80",
+      "56080",
+      "〇〇 〇〇",
+      "",
+      "",
+    ]);
+  });
+
+  it("outputs the RECEIPT_QUALIFIED_CSV_HEADERS as the first row", () => {
+    const rows = buildReceiptQualifiedCsvRowsWithHeader([
+      {
+        id: "doc-1",
+        title: "T1234567890123",
+        counterparty: "サンプル株式会社",
+        contextDate: null,
+        amountYen: null,
+        notes: "",
+        tags: [],
+        extracted: {},
+      },
+    ]);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toEqual([...RECEIPT_QUALIFIED_CSV_HEADERS]);
   });
 });

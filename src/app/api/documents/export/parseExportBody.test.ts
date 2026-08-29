@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 import { EXPORTABLE_TYPES, exportFilenameTimestamp, parseExportBody } from "./parseExportBody";
 
 describe("EXPORTABLE_TYPES", () => {
-  it("allows invoice and purchase_order", () => {
+  it("allows invoice, purchase_order, and receipt", () => {
     expect(EXPORTABLE_TYPES.has("invoice")).toBe(true);
     expect(EXPORTABLE_TYPES.has("purchase_order")).toBe(true);
+    expect(EXPORTABLE_TYPES.has("receipt")).toBe(true);
   });
 
   it("does not allow business_card (contains personal information)", () => {
@@ -21,6 +22,7 @@ describe("parseExportBody", () => {
     });
     expect(parsed).toEqual({
       documentType: "invoice",
+      documentMode: null,
       documentIds: ["a", "b"],
       exportMode: "with_line_items",
     });
@@ -33,9 +35,40 @@ describe("parseExportBody", () => {
     });
     expect(parsed).toEqual({
       documentType: "purchase_order",
+      documentMode: null,
       documentIds: ["a"],
       exportMode: "summary",
     });
+  });
+
+  it("parses a valid receipt export request with documentMode", () => {
+    const parsed = parseExportBody({
+      documentType: "receipt",
+      documentMode: "expense",
+      documentIds: ["a"],
+    });
+    expect(parsed).toEqual({
+      documentType: "receipt",
+      documentMode: "expense",
+      documentIds: ["a"],
+      exportMode: "summary",
+    });
+  });
+
+  it("rejects a receipt export request without documentMode", () => {
+    expect(
+      parseExportBody({ documentType: "receipt", documentIds: ["a"] })
+    ).toBeNull();
+  });
+
+  it("rejects a receipt export request with an invalid documentMode", () => {
+    expect(
+      parseExportBody({
+        documentType: "receipt",
+        documentMode: "bogus",
+        documentIds: ["a"],
+      })
+    ).toBeNull();
   });
 
   it("defaults exportMode to summary for unknown values", () => {

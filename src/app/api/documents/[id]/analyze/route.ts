@@ -3,7 +3,7 @@ import { getActiveTenant } from "@/lib/auth/getActiveTenant";
 import { getViewerContext } from "@/lib/auth/getViewerContext";
 import { canMutateDocument } from "@/lib/documents/canMutateDocument";
 import type { LineItemDraft } from "@/lib/documents/pluginTypes";
-import { getDocumentPlugin } from "@/lib/documents/registry";
+import { resolveDocumentPlugin } from "@/lib/documents/resolvePlugin";
 import { BUCKET } from "@/lib/documents/storagePaths";
 import { estimateCostYen, extractTokenUsage } from "@/lib/image-analysis/estimateCostYen";
 import {
@@ -20,6 +20,7 @@ type DocumentRow = {
   id: string;
   owner_user_id: string;
   document_type: string;
+  document_mode: string | null;
   company_visible: boolean;
 };
 
@@ -65,7 +66,7 @@ export async function POST(_req: Request, { params }: RouteContext) {
   const supabase = createServerSupabase();
   const { data: document, error: documentError } = await supabase
     .from("captured_documents")
-    .select("id, owner_user_id, document_type, company_visible")
+    .select("id, owner_user_id, document_type, document_mode, company_visible")
     .eq("id", params.id)
     .eq("tenant_id", tenant.tenantId)
     .maybeSingle();
@@ -91,10 +92,11 @@ export async function POST(_req: Request, { params }: RouteContext) {
     return NextResponse.json({ error: "文書を更新する権限がありません" }, { status: 403 });
   }
 
-  const plugin = getDocumentPlugin(row.document_type);
-  if (!plugin) {
+  const resolved = resolveDocumentPlugin(row.document_type, row.document_mode);
+  if (!resolved) {
     return NextResponse.json({ error: "文書種別が不正です" }, { status: 400 });
   }
+  const plugin = resolved.plugin;
 
   const { data: images, error: imageError } = await supabase
     .from("captured_document_images")

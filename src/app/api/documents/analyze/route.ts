@@ -162,14 +162,19 @@ export async function POST(req: Request) {
     console.error("image_analysis_runs insert failed", runError);
   }
 
-  const { data: rows, error: rowsError } = await supabase
+  let dupQuery = supabase
     .from("captured_documents")
     .select(
       "id, owner_user_id, company_visible, notes, tags, context_date, extracted, updated_at"
     )
     .eq("tenant_id", tenant.tenantId)
-    .eq("document_type", parsed.documentType)
-    .or(`owner_user_id.eq.${viewer.userId},company_visible.eq.true`);
+    .eq("document_type", parsed.documentType);
+  if (parsed.documentMode !== null) {
+    dupQuery = dupQuery.eq("document_mode", parsed.documentMode);
+  }
+  const { data: rows, error: rowsError } = await dupQuery.or(
+    `owner_user_id.eq.${viewer.userId},company_visible.eq.true`
+  );
 
   if (rowsError) {
     console.error("captured_documents duplicate fetch failed", rowsError);

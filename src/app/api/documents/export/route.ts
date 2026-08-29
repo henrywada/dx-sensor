@@ -4,6 +4,8 @@ import { getViewerContext } from "@/lib/auth/getViewerContext";
 import {
   buildInvoiceCsvRowsWithHeader,
   buildPurchaseOrderCsvRowsWithHeader,
+  buildReceiptExpenseCsvRowsWithHeader,
+  buildReceiptQualifiedCsvRowsWithHeader,
   encodeCsvWithBom,
 } from "@/lib/documents/exportCsv";
 import { createServerSupabase } from "@/lib/supabase/server";
@@ -13,6 +15,7 @@ import {
   exportFilenameTimestamp,
   parseExportBody,
   toExportDocument,
+  toReceiptExportDocument,
 } from "./parseExportBody";
 
 export async function POST(req: Request) {
@@ -39,14 +42,17 @@ export async function POST(req: Request) {
   }
 
   const supabase = createServerSupabase();
-  const { data, error } = await supabase
+  let fetchQuery = supabase
     .from("captured_documents")
     .select(
       "id, title, counterparty, context_date, amount_yen, notes, tags, extracted"
     )
     .eq("tenant_id", tenant.tenantId)
-    .eq("document_type", parsed.documentType)
-    .in("id", parsed.documentIds);
+    .eq("document_type", parsed.documentType);
+  if (parsed.documentMode !== null) {
+    fetchQuery = fetchQuery.eq("document_mode", parsed.documentMode);
+  }
+  const { data, error } = await fetchQuery.in("id", parsed.documentIds);
 
   if (error) {
     console.error("captured_documents export fetch failed", error);
@@ -80,19 +86,33 @@ export async function POST(req: Request) {
   }
 
   const rowById = new Map(readableRows.map((row) => [row.id, row]));
-  const documents = parsed.documentIds
+  const orderedRows = parsed.documentIds
     .map((id) => rowById.get(id))
-    .filter((row): row is DocumentRow => row !== undefined)
-    .map((row) => toExportDocument(row, lineItemsByDocument.get(row.id) ?? []));
+    .filter((row): row is DocumentRow => row !== undefined);
 
-  const csvRows =
-    parsed.documentType === "purchase_order"
-      ? buildPurchaseOrderCsvRowsWithHeader(documents, parsed.exportMode)
-      : buildInvoiceCsvRowsWithHeader(documents, parsed.exportMode);
+  let csvRows: string[][];
+  let filenamePrefix: string;
+
+  if (parsed.documentType === "receipt") {
+    const receiptDocuments = orderedRows.map(toReceiptExportDocument);
+    csvRows =
+      parsed.documentMode === "qualified_invoice"
+        ? buildReceiptQualifiedCsvRowsWithHeader(receiptDocuments)
+        : buildReceiptExpenseCsvRowsWithHeader(receiptDocuments);
+    filenamePrefix = `receipts_${parsed.documentMode}`;
+  } else {
+    const documents = orderedRows.map((row) =>
+      toExportDocument(row, lineItemsByDocument.get(row.id) ?? [])
+    );
+    csvRows =
+      parsed.documentType === "purchase_order"
+        ? buildPurchaseOrderCsvRowsWithHeader(documents, parsed.exportMode)
+        : buildInvoiceCsvRowsWithHeader(documents, parsed.exportMode);
+    filenamePrefix = parsed.documentType === "purchase_order" ? "purchase_orders" : "invoices";
+  }
+
   const bodyBuffer = encodeCsvWithBom(csvRows);
   const timestamp = exportFilenameTimestamp();
-  const filenamePrefix =
-    parsed.documentType === "purchase_order" ? "purchase_orders" : "invoices";
 
   return new Response(new Uint8Array(bodyBuffer), {
     headers: {

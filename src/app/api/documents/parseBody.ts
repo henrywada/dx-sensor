@@ -3,7 +3,7 @@ import type {
   ImageRole,
   LineItemDraft,
 } from "@/lib/documents/pluginTypes";
-import { getDocumentPlugin } from "@/lib/documents/registry";
+import { resolveDocumentPlugin } from "@/lib/documents/resolvePlugin";
 import { isTmpPath } from "@/lib/documents/storagePaths";
 
 type ParseContext = {
@@ -18,6 +18,7 @@ export type ParsedAnalyzeImage = {
 
 export type ParsedAnalyzeBody = {
   documentType: string;
+  documentMode: string | null;
   plugin: DocumentTypePlugin;
   images: ParsedAnalyzeImage[];
 };
@@ -29,6 +30,7 @@ export type ParsedCommitImage = {
 
 export type ParsedCommitBody = {
   documentType: string;
+  documentMode: string | null;
   plugin: DocumentTypePlugin;
   existingId: string | null;
   companyVisible: boolean;
@@ -58,6 +60,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function parsePlugin(body: Record<string, unknown>): {
   documentType: string;
+  documentMode: string | null;
   plugin: DocumentTypePlugin;
 } {
   const documentType = body.documentType;
@@ -65,12 +68,18 @@ function parsePlugin(body: Record<string, unknown>): {
     throw new Error("documentType is required");
   }
 
-  const plugin = getDocumentPlugin(documentType);
-  if (!plugin) {
-    throw new Error("unknown document type");
+  const rawMode = body.documentMode;
+  if (rawMode !== undefined && rawMode !== null && typeof rawMode !== "string") {
+    throw new Error("invalid documentMode");
+  }
+  const modeId = typeof rawMode === "string" ? rawMode : null;
+
+  const resolved = resolveDocumentPlugin(documentType, modeId);
+  if (!resolved) {
+    throw new Error("unknown document type or mode");
   }
 
-  return { documentType, plugin };
+  return { documentType, documentMode: resolved.documentMode, plugin: resolved.plugin };
 }
 
 function parseRole(value: unknown, plugin: DocumentTypePlugin): ImageRole {
@@ -158,7 +167,7 @@ export function parseAnalyzeBody(
 ): ParsedAnalyzeBody {
   if (!isRecord(body)) throw new Error("invalid body");
 
-  const { documentType, plugin } = parsePlugin(body);
+  const { documentType, documentMode, plugin } = parsePlugin(body);
   if (!Array.isArray(body.images)) throw new Error("images are required");
 
   const images = body.images.map((image) => {
@@ -173,7 +182,12 @@ export function parseAnalyzeBody(
     return { role, path: image.path };
   });
 
-  return { documentType, plugin, images: validateImages(images, plugin) };
+  return {
+    documentType,
+    documentMode,
+    plugin,
+    images: validateImages(images, plugin),
+  };
 }
 
 export function parseCommitBody(
@@ -182,7 +196,7 @@ export function parseCommitBody(
 ): ParsedCommitBody {
   if (!isRecord(body)) throw new Error("invalid body");
 
-  const { documentType, plugin } = parsePlugin(body);
+  const { documentType, documentMode, plugin } = parsePlugin(body);
   if (!Array.isArray(body.images)) throw new Error("images are required");
 
   const images = body.images.map((image) => {
@@ -199,6 +213,7 @@ export function parseCommitBody(
 
   return {
     documentType,
+    documentMode,
     plugin,
     existingId: parseOptionalUuid(body.existingId),
     companyVisible: body.companyVisible === true,

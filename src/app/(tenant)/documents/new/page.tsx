@@ -5,8 +5,14 @@ import { tokyoToday } from "@/lib/documents/tokyoDate";
 import { CaptureDocumentForm } from "./CaptureDocumentForm";
 import { InvoiceCaptureForm } from "./InvoiceCaptureForm";
 import { PurchaseOrderCaptureForm } from "./PurchaseOrderCaptureForm";
+import { ReceiptCaptureForm } from "./ReceiptCaptureForm";
 
-const ALLOWED_TYPES = ["business_card", "invoice", "purchase_order"] as const;
+const ALLOWED_TYPES = [
+  "business_card",
+  "invoice",
+  "purchase_order",
+  "receipt",
+] as const;
 
 interface NewDocumentPageProps {
   searchParams?: {
@@ -50,6 +56,15 @@ export default async function NewDocumentPage({
   if (documentType === "purchase_order") {
     return (
       <PurchaseOrderCaptureForm
+        tenantId={tenant.tenantId}
+        userId={viewer.userId}
+      />
+    );
+  }
+
+  if (documentType === "receipt") {
+    return (
+      <ReceiptCaptureForm
         tenantId={tenant.tenantId}
         userId={viewer.userId}
       />

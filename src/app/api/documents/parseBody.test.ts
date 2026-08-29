@@ -23,6 +23,7 @@ describe("parseAnalyzeBody", () => {
       )
     ).toEqual({
       documentType: "business_card",
+      documentMode: null,
       plugin: expect.objectContaining({ id: "business_card" }),
       images: [{ role: "front", path: frontTmpPath }],
     });
@@ -43,8 +44,75 @@ describe("parseAnalyzeBody", () => {
     expect(() =>
       parseAnalyzeBody(
         {
-          documentType: "receipt",
+          documentType: "unknown_type",
           images: [{ role: "front", path: frontTmpPath }],
+        },
+        { tenantId, userId }
+      )
+    ).toThrow();
+  });
+
+  it("accepts receipt with a valid documentMode and returns the resolved mode", () => {
+    const body = parseAnalyzeBody(
+      {
+        documentType: "receipt",
+        documentMode: "expense",
+        images: [{ role: "page", path: pageTmpPath }],
+      },
+      { tenantId, userId }
+    );
+    expect(body.documentMode).toBe("expense");
+    expect(body.plugin.id).toBe("receipt");
+  });
+
+  it("rejects receipt without a documentMode", () => {
+    expect(() =>
+      parseAnalyzeBody(
+        {
+          documentType: "receipt",
+          images: [{ role: "page", path: pageTmpPath }],
+        },
+        { tenantId, userId }
+      )
+    ).toThrow();
+  });
+
+  it("rejects receipt with an invalid documentMode", () => {
+    expect(() =>
+      parseAnalyzeBody(
+        {
+          documentType: "receipt",
+          documentMode: "bogus",
+          images: [{ role: "page", path: pageTmpPath }],
+        },
+        { tenantId, userId }
+      )
+    ).toThrow();
+  });
+
+  it("rejects front-role images for receipt", () => {
+    expect(() =>
+      parseAnalyzeBody(
+        {
+          documentType: "receipt",
+          documentMode: "expense",
+          images: [{ role: "front", path: frontTmpPath }],
+        },
+        { tenantId, userId }
+      )
+    ).toThrow();
+  });
+
+  it("rejects more than one page image for receipt", () => {
+    expect(() =>
+      parseAnalyzeBody(
+        {
+          documentType: "receipt",
+          documentMode: "expense",
+          images: [
+            { role: "page", path: pageTmpPath },
+            { role: "page", path: pageTmpPath },
+          ],
         },
         { tenantId, userId }
       )
@@ -100,6 +168,7 @@ describe("parseCommitBody", () => {
       )
     ).toEqual({
       documentType: "business_card",
+      documentMode: null,
       plugin: expect.objectContaining({ id: "business_card" }),
       existingId: null,
       companyVisible: true,
@@ -197,6 +266,34 @@ describe("parseCommitBody", () => {
         tax_rate: "10",
       },
     ]);
+  });
+
+  it("round-trips documentMode for a receipt commit without requiring lineItems", () => {
+    const result = parseCommitBody(
+      {
+        documentType: "receipt",
+        documentMode: "qualified_invoice",
+        companyVisible: false,
+        images: [{ role: "page", tmpPath: pageTmpPath }],
+      },
+      { tenantId, userId }
+    );
+    expect(result.documentMode).toBe("qualified_invoice");
+    expect(result.lineItems).toEqual([]);
+  });
+
+  it("rejects a receipt commit with an invalid documentMode", () => {
+    expect(() =>
+      parseCommitBody(
+        {
+          documentType: "receipt",
+          documentMode: "bogus",
+          companyVisible: false,
+          images: [{ role: "page", tmpPath: pageTmpPath }],
+        },
+        { tenantId, userId }
+      )
+    ).toThrow();
   });
 });
 

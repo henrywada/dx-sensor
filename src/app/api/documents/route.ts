@@ -48,6 +48,7 @@ type ListDocumentRow = {
   id: string;
   owner_user_id: string;
   document_type: string;
+  document_mode: string | null;
   company_visible: boolean;
   title: string;
   counterparty: string;
@@ -213,6 +214,13 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "文書種別が不正です" }, { status: 400 });
   }
 
+  const mode = url.searchParams.get("mode");
+  if (plugin.modes && plugin.modes.length > 0) {
+    if (!mode || !plugin.modes.some((m) => m.id === mode)) {
+      return NextResponse.json({ error: "区分（mode）の指定が不正です" }, { status: 400 });
+    }
+  }
+
   const scope = parseScope(url.searchParams.get("scope"));
   const offset = parseOffset(url.searchParams.get("offset"));
   const from = parseDate(url.searchParams.get("from"));
@@ -229,10 +237,14 @@ export async function GET(req: Request) {
   let query = supabase
     .from("captured_documents")
     .select(
-      "id, owner_user_id, document_type, company_visible, title, counterparty, context_date, amount_yen, notes, tags, extracted, created_at, updated_at"
+      "id, owner_user_id, document_type, document_mode, company_visible, title, counterparty, context_date, amount_yen, notes, tags, extracted, created_at, updated_at"
     )
     .eq("tenant_id", tenant.tenantId)
     .eq("document_type", plugin.id);
+
+  if (mode) {
+    query = query.eq("document_mode", mode);
+  }
 
   if (scope === "own") {
     query = query.eq("owner_user_id", viewer.userId);
@@ -269,7 +281,9 @@ export async function GET(req: Request) {
   const frontImages = new Map<string, string>();
 
   if (ids.length > 0) {
-    const thumbnailRole = plugin.supportsLineItems ? "page" : "front";
+    const thumbnailRole = plugin.imagePolicy.allowedRoles.includes("page")
+      ? "page"
+      : "front";
     const { data: images, error: imageError } = await supabase
       .from("captured_document_images")
       .select("document_id, storage_path, sort_order")
@@ -293,6 +307,7 @@ export async function GET(req: Request) {
     pageRows.map(async (row) => ({
       id: row.id,
       documentType: row.document_type,
+      documentMode: row.document_mode,
       ownerUserId: row.owner_user_id,
       companyVisible: row.company_visible,
       title: row.title,
@@ -341,14 +356,19 @@ export async function POST(req: Request) {
   const supabase = createServerSupabase();
   const extracted = parsed.plugin.parseExtracted(parsed.extracted);
 
-  const { data: rows, error: rowsError } = await supabase
+  let dupQuery = supabase
     .from("captured_documents")
     .select(
       "id, owner_user_id, company_visible, notes, tags, context_date, extracted, raw_ocr, updated_at"
     )
     .eq("tenant_id", tenant.tenantId)
-    .eq("document_type", parsed.documentType)
-    .or(`owner_user_id.eq.${viewer.userId},company_visible.eq.true`);
+    .eq("document_type", parsed.documentType);
+  if (parsed.documentMode !== null) {
+    dupQuery = dupQuery.eq("document_mode", parsed.documentMode);
+  }
+  const { data: rows, error: rowsError } = await dupQuery.or(
+    `owner_user_id.eq.${viewer.userId},company_visible.eq.true`
+  );
 
   if (rowsError) {
     console.error("captured_documents duplicate fetch failed", rowsError);
@@ -468,6 +488,7 @@ export async function POST(req: Request) {
         tenant_id: tenant.tenantId,
         owner_user_id: viewer.userId,
         document_type: parsed.documentType,
+        document_mode: parsed.documentMode,
       })
       .select("id")
       .maybeSingle();

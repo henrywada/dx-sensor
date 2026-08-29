@@ -11,6 +11,29 @@ export interface LineItemDraft {
   tax_rate: string;
 }
 
+export interface DocumentMode {
+  id: string;
+  label: string;
+  analyzePrompt: string;
+  parseExtracted(raw: unknown): Record<string, string>;
+  toIndexedFields(
+    extracted: Record<string, string>,
+    user: {
+      notes: string;
+      tags: string[];
+      contextDate: string | null;
+    }
+  ): {
+    title: string;
+    counterparty: string;
+    context_date: string | null;
+    amount_yen: number | null;
+  };
+  duplicateKeys(
+    extracted: Record<string, string>
+  ): { kind: string; value: string }[];
+}
+
 export interface DocumentTypePlugin {
   id: string;
   label: string;
@@ -38,4 +61,6 @@ export interface DocumentTypePlugin {
   /** analyzePrompt が返す JSON 形の説明（Gemini 用。invoice は structured） */
   structuredOcr?: boolean;
   parseLineItems?(raw: unknown): LineItemDraft[];
+  /** 区分（モード）を持つ種類のみ。未指定なら従来通り単一フィールドセット。 */
+  modes?: DocumentMode[];
 }
