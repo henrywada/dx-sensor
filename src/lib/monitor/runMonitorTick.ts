@@ -82,7 +82,8 @@ export type RunMonitorTickDeps = {
   analyzeImages: (input: AnalyzeMonitorImagesInput) => Promise<VisionAnalyzeResult>;
   insertChangeEvent: (input: InsertMonitorChangeEventInput) => Promise<string>;
   logAnalysisRun: (input: LogAnalysisRunInput) => Promise<void>;
-  deleteCaptureIfUnreferenced: (captureId: string) => Promise<void>;
+  /** 実際に削除した場合は true を返す（レスポンスの署名URLを無効化するため）。 */
+  deleteCaptureIfUnreferenced: (captureId: string) => Promise<boolean>;
 };
 
 export async function runMonitorTick(
@@ -158,7 +159,7 @@ export async function runMonitorTick(
       emailQueued: false,
     });
     await deps.markCaptureProcessed(currCapture.id);
-    await deps.deleteCaptureIfUnreferenced(prevCapture.id);
+    const prevDeleted = await deps.deleteCaptureIfUnreferenced(prevCapture.id);
     return {
       status: "processed",
       severity,
@@ -167,7 +168,8 @@ export async function runMonitorTick(
       currCaptureId: currCapture.id,
       prevCaptureNo,
       currCaptureNo,
-      prevSignedUrl,
+      // 削除済みなら署名URLは実体のない壊れたリンクになるためnullを返す。
+      prevSignedUrl: prevDeleted ? null : prevSignedUrl,
       currSignedUrl,
       summary: null,
       eventId,
@@ -205,9 +207,10 @@ export async function runMonitorTick(
   });
 
   await deps.markCaptureProcessed(currCapture.id);
+  let prevDeleted = false;
   if (severity === "minor") {
     // "notify" 判定はBefore/After証拠画像として保持するため削除しない。
-    await deps.deleteCaptureIfUnreferenced(prevCapture.id);
+    prevDeleted = await deps.deleteCaptureIfUnreferenced(prevCapture.id);
   }
   return {
     status: "processed",
@@ -217,7 +220,8 @@ export async function runMonitorTick(
     currCaptureId: currCapture.id,
     prevCaptureNo,
     currCaptureNo,
-    prevSignedUrl,
+    // 削除済みなら署名URLは実体のない壊れたリンクになるためnullを返す。
+    prevSignedUrl: prevDeleted ? null : prevSignedUrl,
     currSignedUrl,
     summary: analysis.text,
     eventId,

@@ -426,22 +426,6 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
         </select>
       </label>
 
-      <label className="flex items-start gap-2 text-sm text-ink">
-        <input
-          type="checkbox"
-          checked={invertRotation}
-          disabled={autoRunning}
-          onChange={(e) => setInvertRotation(e.target.checked)}
-          className="mt-0.5 accent-signal"
-        />
-        <span>
-          保存画像の向きが違うとき：回転方向を反転する
-          <span className="mt-0.5 block text-xs text-ink-soft">
-            右に傾けて設置した場合や、景色が横倒し／上下逆ならオンにして撮り直してください。
-          </span>
-        </span>
-      </label>
-
       <label className="flex items-center justify-between gap-3 text-sm text-ink">
         <span>撮影間隔</span>
         <select
@@ -522,6 +506,22 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
           {uploadStatus === "uploading" ? " · 保存中..." : ""}
         </p>
       </div>
+
+      <label className="flex items-start gap-2 text-sm text-ink">
+        <input
+          type="checkbox"
+          checked={invertRotation}
+          disabled={autoRunning}
+          onChange={(e) => setInvertRotation(e.target.checked)}
+          className="mt-0.5 accent-signal"
+        />
+        <span>
+          保存画像の向きが違うとき：回転方向を反転する
+          <span className="mt-0.5 block text-xs text-ink-soft">
+            右に傾けて設置した場合や、景色が横倒し／上下逆ならオンにして撮り直してください。
+          </span>
+        </span>
+      </label>
 
       {uploadStatus === "error" && (
         <p className="rounded-md bg-alert/10 px-3 py-2 text-sm text-alert">

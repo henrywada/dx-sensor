@@ -221,7 +221,9 @@ export async function POST(req: Request) {
       // ベストエフォート：skip/minor判定で不要になった画像の間引き。
       // このcaptureIdが以降のtickでprevCaptureIdとして送られてくることは
       // 二度とないため、ここで失敗すると当該画像は削除されないまま残る
-      // （自動リトライはない）。
+      // （自動リトライはない）。戻り値はDB行を実際に削除できたかどうかで、
+      // 呼び出し元（runMonitorTick）はこれを見てレスポンスの署名URLを
+      // 無効化する（削除済み画像への壊れたリンクを返さないため）。
       //
       // 「notifyイベントに参照されていなければ削除」の判定と削除本体は
       // DB関数（delete_capture_if_unreferenced, 0022マイグレーション）側で
@@ -236,9 +238,9 @@ export async function POST(req: Request) {
 
         if (rpcError) {
           console.error("deleteCaptureIfUnreferenced: rpc failed", rpcError);
-          return;
+          return false;
         }
-        if (!storagePath) return; // notify証拠として参照されている、または既に削除済み
+        if (!storagePath) return false; // notify証拠として参照されている、または既に削除済み
 
         const { error: storageError } = await supabase.storage
           .from(AUTO_CAPTURES_BUCKET)
@@ -247,8 +249,10 @@ export async function POST(req: Request) {
         if (storageError) {
           console.error("deleteCaptureIfUnreferenced: storage delete failed", storageError);
         }
+        return true; // DB行は削除済み（Storage削除の成否に関わらず、画像は表示できない）
       } catch (err) {
         console.error("deleteCaptureIfUnreferenced failed", err);
+        return false;
       }
     },
   };

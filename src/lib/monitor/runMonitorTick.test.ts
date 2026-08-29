@@ -28,7 +28,7 @@ function createDeps(overrides: Partial<RunMonitorTickDeps> = {}): RunMonitorTick
     analyzeImages: vi.fn(async () => ({ text: "変化があります", raw: {} })),
     insertChangeEvent: vi.fn(async () => "event-id"),
     logAnalysisRun: vi.fn(async () => undefined),
-    deleteCaptureIfUnreferenced: vi.fn(async () => undefined),
+    deleteCaptureIfUnreferenced: vi.fn(async () => false),
     ...overrides,
   };
 }
@@ -90,6 +90,7 @@ describe("runMonitorTick", () => {
       })),
       diffScore: vi.fn(async () => 0.01),
       insertChangeEvent: vi.fn(async () => "skip-event-id"),
+      deleteCaptureIfUnreferenced: vi.fn(async () => true),
     });
 
     const result = await runMonitorTick(REQUEST, deps);
@@ -100,7 +101,8 @@ describe("runMonitorTick", () => {
       diffScore: 0.01,
       prevCaptureId: "prev-capture",
       currCaptureId: "curr-capture",
-      prevSignedUrl: "signed:tenant/day/prev.jpg",
+      // 削除された前回画像の署名URLはそのまま返すと壊れたリンクになるためnull。
+      prevSignedUrl: null,
       currSignedUrl: "signed:tenant/day/curr.jpg",
       eventId: "skip-event-id",
     });
@@ -115,6 +117,28 @@ describe("runMonitorTick", () => {
     );
     expect(deps.logAnalysisRun).not.toHaveBeenCalled();
     expect(deps.deleteCaptureIfUnreferenced).toHaveBeenCalledWith("prev-capture");
+  });
+
+  it("keeps the previous image URL when deletion did not actually remove it", async () => {
+    const deps = createDeps({
+      getNextUnprocessedCapture: vi.fn(async () => ({
+        id: "curr-capture",
+        storagePath: "tenant/day/curr.jpg",
+      })),
+      getCaptureById: vi.fn(async () => ({
+        id: "prev-capture",
+        storagePath: "tenant/day/prev.jpg",
+      })),
+      diffScore: vi.fn(async () => 0.01),
+      deleteCaptureIfUnreferenced: vi.fn(async () => false),
+    });
+
+    const result = await runMonitorTick(REQUEST, deps);
+
+    expect(result).toMatchObject({
+      severity: "skip",
+      prevSignedUrl: "signed:tenant/day/prev.jpg",
+    });
   });
 
   it("analyzes and deletes the previous capture for minor (non-notified) diffs", async () => {
@@ -132,6 +156,7 @@ describe("runMonitorTick", () => {
         text: "軽微な変化があります",
         raw: {},
       })),
+      deleteCaptureIfUnreferenced: vi.fn(async () => true),
     });
 
     const result = await runMonitorTick(REQUEST, deps);
@@ -140,6 +165,7 @@ describe("runMonitorTick", () => {
       status: "processed",
       severity: "minor",
       eventId: "event-id",
+      prevSignedUrl: null,
     });
     expect(deps.insertChangeEvent).toHaveBeenCalledWith(
       expect.objectContaining({ severity: "minor" })
