@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EXPORTABLE_TYPES, exportFilenameTimestamp, parseExportBody } from "./route";
+import { EXPORTABLE_TYPES, exportFilenameTimestamp, parseExportBody } from "./parseExportBody";
 
 describe("EXPORTABLE_TYPES", () => {
   it("allows invoice and purchase_order", () => {
