@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   buildInvoiceCsvRows,
   buildInvoiceCsvRowsWithHeader,
+  buildPurchaseOrderCsvRows,
+  buildPurchaseOrderCsvRowsWithHeader,
   encodeCsvWithBom,
   INVOICE_CSV_HEADERS,
+  PURCHASE_ORDER_CSV_HEADERS,
 } from "./exportCsv";
 
 describe("exportCsv", () => {
@@ -135,6 +138,18 @@ describe("exportCsv", () => {
     expect(csv).toContain('"f\ng"');
   });
 
+  it("guards formula-injection-prone leading characters with a leading quote", () => {
+    const csv = encodeCsvWithBom([
+      ["=CMD('/C calc')", "+1+1", "-1+1", "@SUM(A1)", "normal"],
+    ]).toString("utf-8");
+    expect(csv).toContain("'=CMD('/C calc')");
+    expect(csv).toContain("'+1+1");
+    expect(csv).toContain("'-1+1");
+    expect(csv).toContain("'@SUM(A1)");
+    expect(csv).toContain(",normal");
+    expect(csv).not.toMatch(/(?<!')=CMD/);
+  });
+
   it("outputs column header row as first line", () => {
     const rows = buildInvoiceCsvRowsWithHeader([
       {
@@ -180,5 +195,144 @@ describe("exportCsv", () => {
       },
     ]);
     expect(rows[0]).toHaveLength(25);
+  });
+});
+
+describe("purchase order exportCsv", () => {
+  it("outputs header-only row when no line items", () => {
+    const rows = buildPurchaseOrderCsvRows([
+      {
+        id: "doc-1",
+        title: "PO-001",
+        counterparty: "サンプル株式会社",
+        contextDate: "2024-01-31",
+        amountYen: 1000,
+        notes: "",
+        tags: [],
+        extracted: { issue_date: "2024-01-31", issuer_name: "自社株式会社" },
+        lineItems: [],
+      },
+    ]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0][1]).toBe("PO-001");
+    expect(rows[0][18]).toBe(""); // 明細行番号 empty
+  });
+
+  it("maps recipient to 発注先 column and issuer to 発注元 column (reversed from invoice)", () => {
+    const rows = buildPurchaseOrderCsvRows([
+      {
+        id: "doc-1",
+        title: "PO-001",
+        counterparty: "取引先株式会社",
+        contextDate: "2024-01-31",
+        amountYen: 1000,
+        notes: "",
+        tags: [],
+        extracted: {
+          issuer_name: "自社株式会社",
+          delivery_date: "2024-02-15",
+          delivery_place: "本社倉庫",
+          payment_terms: "月末締め翌月末払い",
+        },
+        lineItems: [],
+      },
+    ]);
+    expect(rows[0][4]).toBe("取引先株式会社"); // 発注先 = counterparty
+    expect(rows[0][5]).toBe("自社株式会社"); // 発注元 = extracted.issuer_name
+    expect(rows[0][3]).toBe("2024-02-15"); // 納期
+    expect(rows[0][7]).toBe("本社倉庫"); // 納品場所
+    expect(rows[0][8]).toBe("月末締め翌月末払い"); // 支払条件
+  });
+
+  it("outputs one row per line item sorted by line_no in with_line_items mode", () => {
+    const rows = buildPurchaseOrderCsvRows(
+      [
+        {
+          id: "doc-1",
+          title: "PO-001",
+          counterparty: "取引先株式会社",
+          contextDate: "2024-01-31",
+          amountYen: 3000,
+          notes: "memo",
+          tags: ["tag1", "tag2"],
+          extracted: {},
+          lineItems: [
+            {
+              line_no: 2,
+              transaction_date: "2024-01-20",
+              description: "B",
+              quantity: "1",
+              unit: "式",
+              unit_price: "1000",
+              amount: "1000",
+              tax_rate: "10",
+            },
+            {
+              line_no: 1,
+              transaction_date: "2024-01-15",
+              description: "A",
+              quantity: "2",
+              unit: "個",
+              unit_price: "1000",
+              amount: "2000",
+              tax_rate: "8",
+            },
+          ],
+        },
+      ],
+      "with_line_items"
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows[0][18]).toBe("1");
+    expect(rows[0][20]).toBe("A");
+    expect(rows[1][18]).toBe("2");
+    expect(rows[1][20]).toBe("B");
+  });
+
+  it("outputs column header row as first line", () => {
+    const rows = buildPurchaseOrderCsvRowsWithHeader([
+      {
+        id: "doc-1",
+        title: "PO-001",
+        counterparty: "取引先株式会社",
+        contextDate: null,
+        amountYen: null,
+        notes: "",
+        tags: [],
+        extracted: {},
+        lineItems: [],
+      },
+    ]);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toEqual([...PURCHASE_ORDER_CSV_HEADERS]);
+    expect(rows[1][1]).toBe("PO-001");
+  });
+
+  it("produces 26 columns per row", () => {
+    const rows = buildPurchaseOrderCsvRows([
+      {
+        id: "doc-1",
+        title: "PO-001",
+        counterparty: "取引先株式会社",
+        contextDate: null,
+        amountYen: null,
+        notes: "",
+        tags: [],
+        extracted: {},
+        lineItems: [
+          {
+            line_no: 1,
+            transaction_date: null,
+            description: "Item",
+            quantity: "1",
+            unit: "",
+            unit_price: "100",
+            amount: "100",
+            tax_rate: "",
+          },
+        ],
+      },
+    ]);
+    expect(rows[0]).toHaveLength(26);
   });
 });

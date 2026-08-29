@@ -3,6 +3,7 @@ import { getActiveTenant } from "@/lib/auth/getActiveTenant";
 import { getViewerContext } from "@/lib/auth/getViewerContext";
 import { DocumentsAlbum } from "./DocumentsAlbum";
 import { InvoiceAlbum } from "./InvoiceAlbum";
+import { PurchaseOrderAlbum } from "./PurchaseOrderAlbum";
 
 interface DocumentsPageProps {
   searchParams?: {
@@ -41,6 +42,16 @@ export default async function DocumentsPage({ searchParams }: DocumentsPageProps
   if (documentType === "invoice") {
     return (
       <InvoiceAlbum
+        documentType={documentType}
+        userId={viewer.userId}
+        initialOpenId={searchParams?.open ?? null}
+      />
+    );
+  }
+
+  if (documentType === "purchase_order") {
+    return (
+      <PurchaseOrderAlbum
         documentType={documentType}
         userId={viewer.userId}
         initialOpenId={searchParams?.open ?? null}

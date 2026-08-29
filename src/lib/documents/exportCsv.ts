@@ -64,11 +64,17 @@ function formatCsvValue(value: string | number | null | undefined): string {
   return String(value);
 }
 
+/** Excel/Google Sheets 等でのCSVフォーミュラインジェクションを防ぐため、数式と解釈されうる先頭文字をエスケープする */
+function guardFormulaInjection(value: string): string {
+  return /^[=+\-@]/.test(value) ? `'${value}` : value;
+}
+
 function escapeCsvField(value: string): string {
-  if (/[",\r\n]/.test(value)) {
-    return `"${value.replace(/"/g, '""')}"`;
+  const guarded = guardFormulaInjection(value);
+  if (/[",\r\n]/.test(guarded)) {
+    return `"${guarded.replace(/"/g, '""')}"`;
   }
-  return value;
+  return guarded;
 }
 
 function encodeCsvRow(fields: string[]): string {
@@ -150,4 +156,117 @@ export function buildInvoiceCsvRowsWithHeader(
 export function encodeCsvWithBom(rows: string[][]): Buffer {
   const body = rows.map(encodeCsvRow).join("\n");
   return Buffer.from("\uFEFF" + body, "utf-8");
+}
+
+export interface PurchaseOrderExportDocument {
+  id: string;
+  title: string;
+  counterparty: string;
+  contextDate: string | null;
+  amountYen: number | null;
+  notes: string;
+  tags: string[];
+  extracted: Record<string, string>;
+  lineItems: InvoiceExportLineItem[];
+}
+
+/** CSV 1行目の列名（発注書 26列） */
+export const PURCHASE_ORDER_CSV_HEADERS = [
+  "発注書ID",
+  "発注番号",
+  "発行日",
+  "納期",
+  "発注先",
+  "発注元",
+  "登録番号",
+  "納品場所",
+  "支払条件",
+  "小計",
+  "消費税10%",
+  "消費税8%",
+  "消費税合計",
+  "合計",
+  "備考",
+  "メモ",
+  "タグ",
+  "取引日",
+  "明細行番号",
+  "明細日付",
+  "品名",
+  "数量",
+  "単位",
+  "単価",
+  "金額",
+  "税率",
+] as const;
+
+function buildPurchaseOrderHeaderColumns(doc: PurchaseOrderExportDocument): string[] {
+  return [
+    doc.id,
+    doc.title,
+    stringField(doc.extracted.issue_date),
+    stringField(doc.extracted.delivery_date),
+    doc.counterparty,
+    stringField(doc.extracted.issuer_name),
+    stringField(doc.extracted.registration_number),
+    stringField(doc.extracted.delivery_place),
+    stringField(doc.extracted.payment_terms),
+    stringField(doc.extracted.subtotal),
+    stringField(doc.extracted.tax_10),
+    stringField(doc.extracted.tax_8),
+    stringField(doc.extracted.tax_total),
+    formatCsvValue(doc.amountYen),
+    stringField(doc.extracted.remarks),
+    doc.notes,
+    doc.tags.join("|"),
+    formatCsvValue(doc.contextDate),
+  ];
+}
+
+export function buildPurchaseOrderCsvRows(
+  documents: PurchaseOrderExportDocument[],
+  mode: InvoiceCsvExportMode = "summary"
+): string[][] {
+  const rows: string[][] = [];
+
+  for (const doc of documents) {
+    const headerColumns = buildPurchaseOrderHeaderColumns(doc);
+
+    if (mode === "summary") {
+      rows.push([...headerColumns, ...EMPTY_LINE_ITEM_COLUMNS]);
+      continue;
+    }
+
+    const sortedLineItems = [...doc.lineItems].sort(
+      (a, b) => a.line_no - b.line_no
+    );
+
+    if (sortedLineItems.length === 0) {
+      rows.push([...headerColumns, ...EMPTY_LINE_ITEM_COLUMNS]);
+      continue;
+    }
+
+    for (const item of sortedLineItems) {
+      rows.push([
+        ...headerColumns,
+        formatCsvValue(item.line_no),
+        formatCsvValue(item.transaction_date),
+        item.description,
+        item.quantity,
+        item.unit,
+        formatCsvValue(item.unit_price),
+        formatCsvValue(item.amount),
+        item.tax_rate,
+      ]);
+    }
+  }
+
+  return rows;
+}
+
+export function buildPurchaseOrderCsvRowsWithHeader(
+  documents: PurchaseOrderExportDocument[],
+  mode: InvoiceCsvExportMode = "summary"
+): string[][] {
+  return [[...PURCHASE_ORDER_CSV_HEADERS], ...buildPurchaseOrderCsvRows(documents, mode)];
 }

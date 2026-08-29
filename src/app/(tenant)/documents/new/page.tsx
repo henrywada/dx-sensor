@@ -4,6 +4,9 @@ import { getViewerContext } from "@/lib/auth/getViewerContext";
 import { tokyoToday } from "@/lib/documents/tokyoDate";
 import { CaptureDocumentForm } from "./CaptureDocumentForm";
 import { InvoiceCaptureForm } from "./InvoiceCaptureForm";
+import { PurchaseOrderCaptureForm } from "./PurchaseOrderCaptureForm";
+
+const ALLOWED_TYPES = ["business_card", "invoice", "purchase_order"] as const;
 
 interface NewDocumentPageProps {
   searchParams?: {
@@ -15,7 +18,9 @@ export default async function NewDocumentPage({
   searchParams,
 }: NewDocumentPageProps) {
   const documentType = searchParams?.type;
-  if (documentType !== "business_card" && documentType !== "invoice") notFound();
+  if (!ALLOWED_TYPES.includes(documentType as (typeof ALLOWED_TYPES)[number])) {
+    notFound();
+  }
 
   const viewer = await getViewerContext();
   if (!viewer.userId) redirect("/login");
@@ -38,6 +43,15 @@ export default async function NewDocumentPage({
         userId={viewer.userId}
         defaultContextDate={tokyoToday()}
         documentType={documentType}
+      />
+    );
+  }
+
+  if (documentType === "purchase_order") {
+    return (
+      <PurchaseOrderCaptureForm
+        tenantId={tenant.tenantId}
+        userId={viewer.userId}
       />
     );
   }

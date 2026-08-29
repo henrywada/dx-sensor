@@ -3,6 +3,7 @@ import { getActiveTenant } from "@/lib/auth/getActiveTenant";
 import { getViewerContext } from "@/lib/auth/getViewerContext";
 import {
   buildInvoiceCsvRowsWithHeader,
+  buildPurchaseOrderCsvRowsWithHeader,
   encodeCsvWithBom,
   type InvoiceCsvExportMode,
   type InvoiceExportDocument,
@@ -51,7 +52,7 @@ function parseAmountYen(value: number | string | null): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function exportFilenameTimestamp(now = new Date()): string {
+export function exportFilenameTimestamp(now = new Date()): string {
   const parts = Object.fromEntries(
     new Intl.DateTimeFormat("ja-JP", {
       timeZone: "Asia/Tokyo",
@@ -69,12 +70,14 @@ function exportFilenameTimestamp(now = new Date()): string {
   return `${parts.year}${parts.month}${parts.day}_${parts.hour}${parts.minute}${parts.second}`;
 }
 
+export const EXPORTABLE_TYPES = new Set(["invoice", "purchase_order"]);
+
 function parseExportMode(value: unknown): InvoiceCsvExportMode {
   if (value === "with_line_items") return "with_line_items";
   return "summary";
 }
 
-function parseExportBody(
+export function parseExportBody(
   body: unknown
 ): { documentType: string; documentIds: string[]; exportMode: InvoiceCsvExportMode } | null {
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
@@ -82,7 +85,7 @@ function parseExportBody(
   }
 
   const { documentType, documentIds, exportMode } = body as ExportBody;
-  if (documentType !== "invoice") return null;
+  if (typeof documentType !== "string" || !EXPORTABLE_TYPES.has(documentType)) return null;
   if (!Array.isArray(documentIds) || documentIds.length === 0) return null;
   if (documentIds.length > 100) return null;
   if (!documentIds.every((id) => typeof id === "string" && id.length > 0)) {
@@ -156,7 +159,7 @@ export async function POST(req: Request) {
       "id, title, counterparty, context_date, amount_yen, notes, tags, extracted"
     )
     .eq("tenant_id", tenant.tenantId)
-    .eq("document_type", "invoice")
+    .eq("document_type", parsed.documentType)
     .in("id", parsed.documentIds);
 
   if (error) {
@@ -196,14 +199,20 @@ export async function POST(req: Request) {
     .filter((row): row is DocumentRow => row !== undefined)
     .map((row) => toExportDocument(row, lineItemsByDocument.get(row.id) ?? []));
 
-  const csvRows = buildInvoiceCsvRowsWithHeader(documents, parsed.exportMode);
+  const csvRows =
+    parsed.documentType === "purchase_order"
+      ? buildPurchaseOrderCsvRowsWithHeader(documents, parsed.exportMode)
+      : buildInvoiceCsvRowsWithHeader(documents, parsed.exportMode);
   const bodyBuffer = encodeCsvWithBom(csvRows);
   const timestamp = exportFilenameTimestamp();
+  const filenamePrefix =
+    parsed.documentType === "purchase_order" ? "purchase_orders" : "invoices";
 
   return new Response(new Uint8Array(bodyBuffer), {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="invoices_${timestamp}.csv"`,
+      "Content-Disposition": `attachment; filename="${filenamePrefix}_${timestamp}.csv"`,
+      "Cache-Control": "no-store",
     },
   });
 }

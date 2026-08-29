@@ -249,7 +249,7 @@ export async function GET(req: Request) {
   if (amountMax !== null) query = query.lte("amount_yen", amountMax);
   if (q) {
     query = query.or(
-      `title.ilike.*${q}*,counterparty.ilike.*${q}*,extracted->>email.ilike.*${q}*,extracted->>recipient_name.ilike.*${q}*`
+      `title.ilike.*${q}*,counterparty.ilike.*${q}*,extracted->>email.ilike.*${q}*,extracted->>recipient_name.ilike.*${q}*,extracted->>issuer_name.ilike.*${q}*`
     );
   }
 
