@@ -181,6 +181,20 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
     }
   }, []);
 
+  // /capture_auto と同様、画面を開くたびに自分の古いイベント履歴を
+  // クリアする（ベストエフォート。失敗しても画面の表示は続行する）。
+  const clearOwnMonitorEvents = useCallback(async () => {
+    try {
+      const { error } = await supabase
+        .from("monitor_change_events")
+        .delete()
+        .eq("user_id", userId);
+      if (error) throw error;
+    } catch (err) {
+      console.error("clearOwnMonitorEvents failed", err);
+    }
+  }, [supabase, userId]);
+
   const openEventCompare = useCallback(
     async (event: MonitorEvent) => {
       if (!event.prev_capture_id || !event.curr_capture_id) return;
@@ -371,12 +385,15 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
     }
 
     void loadInitialData();
-    void loadEvents();
+    void (async () => {
+      await clearOwnMonitorEvents();
+      if (!cancelled) void loadEvents();
+    })();
 
     return () => {
       cancelled = true;
     };
-  }, [loadEvents]);
+  }, [loadEvents, clearOwnMonitorEvents]);
 
   useEffect(() => {
     if (activeTab === "images") {
