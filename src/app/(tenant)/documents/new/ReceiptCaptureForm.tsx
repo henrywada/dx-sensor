@@ -719,7 +719,7 @@ export function ReceiptCaptureForm({ tenantId, userId }: ReceiptCaptureFormProps
 
       <section className="space-y-3 rounded-lg border border-line bg-white p-4">
         <div>
-          <h2 className="text-sm font-bold text-ink">領収書を撮影</h2>
+          <h2 className="text-sm font-bold text-ink">領収書を撮影（{meta.label}）</h2>
           <p className="mt-1 text-xs text-ink-soft">1枚のみ撮影できます。</p>
         </div>
 
