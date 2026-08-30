@@ -92,6 +92,8 @@ type EventCompareModal = {
   error: string | null;
 };
 
+type SavedSession = MonitorSession & { logCount: number; imageCount: number };
+
 type AutoCaptureRow = {
   id: string;
   storage_path: string;
@@ -187,7 +189,7 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
   const [monitoringLocked, setMonitoringLocked] = useState(false);
   const [historyViewMode, setHistoryViewMode] = useState(false);
   const [historyListModalOpen, setHistoryListModalOpen] = useState(false);
-  const [savedSessions, setSavedSessions] = useState<MonitorSession[]>([]);
+  const [savedSessions, setSavedSessions] = useState<SavedSession[]>([]);
   const [historyFilesLoading, setHistoryFilesLoading] = useState(false);
   const [historyFilesError, setHistoryFilesError] = useState<string | null>(null);
 
@@ -495,6 +497,58 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
         if (error) throw new Error(error.message);
       },
     }),
+    [supabase]
+  );
+
+  // 履歴ファイル一覧では、monitorSessionDeps.listSavedSessions（MonitorSession[]を
+  // 返す既存の共通インターフェース）とは別に、表示用のログ件数・画像枚数も
+  // まとめて取得する。monitor_change_eventsをsession_idでグルーピングし、
+  // ログ件数はイベント行数、画像枚数はprev/curr_capture_idの重複を除いた件数とする。
+  const loadSavedSessionsWithCounts = useCallback(
+    async (ownerId: string): Promise<SavedSession[]> => {
+      const [
+        { data: sessionRows, error: sessionsError },
+        { data: eventRows, error: eventsError },
+      ] = await Promise.all([
+        supabase
+          .from("monitor_sessions")
+          .select("id, started_at, stopped_at")
+          .eq("user_id", ownerId)
+          .order("started_at", { ascending: false }),
+        supabase
+          .from("monitor_change_events")
+          .select("session_id, prev_capture_id, curr_capture_id")
+          .eq("user_id", ownerId)
+          .not("session_id", "is", null),
+      ]);
+      if (sessionsError) throw new Error(sessionsError.message);
+      if (eventsError) throw new Error(eventsError.message);
+
+      const countsBySession = new Map<
+        string,
+        { logCount: number; captureIds: Set<string> }
+      >();
+      for (const row of eventRows ?? []) {
+        const sessionId = row.session_id as string;
+        const entry =
+          countsBySession.get(sessionId) ?? { logCount: 0, captureIds: new Set<string>() };
+        entry.logCount += 1;
+        if (row.prev_capture_id) entry.captureIds.add(row.prev_capture_id as string);
+        if (row.curr_capture_id) entry.captureIds.add(row.curr_capture_id as string);
+        countsBySession.set(sessionId, entry);
+      }
+
+      return (sessionRows ?? []).map((row) => {
+        const counts = countsBySession.get(row.id as string);
+        return {
+          id: row.id as string,
+          startedAt: row.started_at as string,
+          stoppedAt: row.stopped_at as string,
+          logCount: counts?.logCount ?? 0,
+          imageCount: counts?.captureIds.size ?? 0,
+        };
+      });
+    },
     [supabase]
   );
 
@@ -807,7 +861,7 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
       // monitoringStartedAt を null に戻すことで、次の handleStartMonitoring が
       // 新規開始パスに入り、カウント・比較画像・lastCurrCaptureIdRef をリセットする。
       setMonitoringStartedAt(null);
-      const sessions = await monitorSessionDeps.listSavedSessions(userId);
+      const sessions = await loadSavedSessionsWithCounts(userId);
       setSavedSessions(sessions);
       setHistoryListModalOpen(true);
     } catch (err) {
@@ -1500,6 +1554,9 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
                   >
                     <p className="text-sm font-medium text-ink">
                       {formatSessionRangeLabel(session)}
+                    </p>
+                    <p className="text-xs text-ink-soft">
+                      ログ{session.logCount}件 ・ 画像{session.imageCount}枚
                     </p>
                   </button>
                   <button
