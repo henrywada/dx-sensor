@@ -9,6 +9,7 @@ import {
   type MountOrientation,
 } from "@/lib/capture/captureFrameFromVideo";
 import { CaptureHintModal } from "./CaptureHintModal";
+import { BaseCapturePhotoModal } from "./BaseCapturePhotoModal";
 
 interface CaptureAutoFormProps {
   tenantId: string;
@@ -51,6 +52,9 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [clearWarning, setClearWarning] = useState<string | null>(null);
   const [hintOpen, setHintOpen] = useState(false);
+  const [baseCaptureModalOpen, setBaseCaptureModalOpen] = useState(false);
+  const [baseCaptureSubmitting, setBaseCaptureSubmitting] = useState(false);
+  const [baseCaptureError, setBaseCaptureError] = useState<string | null>(null);
   const [mountOrientation, setMountOrientation] = useState<MountOrientation>("landscape");
   const [invertRotation, setInvertRotation] = useState(false);
 
@@ -279,6 +283,81 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
     }
   }, [supabase, tenantId, userId, mountOrientation, invertRotation]);
 
+  const handleConfirmBaseCapture = useCallback(async () => {
+    const video = videoRef.current;
+    if (!video || !cameraReadyRef.current) {
+      setBaseCaptureError("カメラの準備ができていません。少し待ってから再度お試しください。");
+      return;
+    }
+
+    setBaseCaptureSubmitting(true);
+    setBaseCaptureError(null);
+
+    try {
+      const canvas = captureFrameFromVideo(video, mountOrientation, invertRotation);
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob(
+          (result) => {
+            if (result) resolve(result);
+            else reject(new Error("画像の生成に失敗しました"));
+          },
+          "image/jpeg",
+          0.92
+        );
+      });
+
+      // 前に登録した基本写真（と、それにひも付く監視ゾーン）を削除する。
+      // monitor_zones は base_photo_id に on delete cascade を張っているため、
+      // ここで基本写真の行を消せば監視ゾーンも自動的に消える。
+      const { data: existingRows, error: selectError } = await supabase
+        .from("monitor_base_photos")
+        .select("id, storage_path")
+        .eq("tenant_id", tenantId)
+        .eq("user_id", userId);
+      if (selectError) throw selectError;
+
+      if (existingRows && existingRows.length > 0) {
+        const paths = existingRows
+          .map((row) => row.storage_path as string)
+          .filter((p) => Boolean(p));
+        if (paths.length > 0) {
+          const { error: removeError } = await supabase.storage
+            .from("auto-captures")
+            .remove(paths);
+          if (removeError) throw removeError;
+        }
+        const { error: deleteError } = await supabase
+          .from("monitor_base_photos")
+          .delete()
+          .eq("tenant_id", tenantId)
+          .eq("user_id", userId);
+        if (deleteError) throw deleteError;
+      }
+
+      const path = `${tenantId}/base/${crypto.randomUUID()}.jpg`;
+      const { error: uploadError } = await supabase.storage
+        .from("auto-captures")
+        .upload(path, blob, { contentType: "image/jpeg" });
+      if (uploadError) throw uploadError;
+
+      const { error: insertError } = await supabase.from("monitor_base_photos").insert({
+        tenant_id: tenantId,
+        user_id: userId,
+        storage_path: path,
+      });
+      if (insertError) throw insertError;
+
+      setBaseCaptureModalOpen(false);
+    } catch (err) {
+      console.error("base photo capture failed", err);
+      setBaseCaptureError(
+        err instanceof Error ? err.message : "基本写真の登録に失敗しました"
+      );
+    } finally {
+      setBaseCaptureSubmitting(false);
+    }
+  }, [supabase, tenantId, userId, mountOrientation, invertRotation]);
+
   // 自動撮影開始後のみ、間隔ごとに取得＆保存（開始前はプレビュー表示のみ）
   useEffect(() => {
     if (!autoRunning || cameraState !== "ready") return;
@@ -340,6 +419,16 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
             <HelpCircle className="h-4 w-4" strokeWidth={1.75} />
             ヒント
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              setBaseCaptureError(null);
+              setBaseCaptureModalOpen(true);
+            }}
+            className="flex items-center gap-1 text-sm font-medium text-signal transition-colors hover:text-ink"
+          >
+            基本写真を撮る
+          </button>
           <Link
             href="/"
             className="text-sm font-medium text-signal transition-colors hover:text-ink"
@@ -350,6 +439,14 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
       </div>
 
       <CaptureHintModal open={hintOpen} onClose={() => setHintOpen(false)} />
+
+      <BaseCapturePhotoModal
+        open={baseCaptureModalOpen}
+        submitting={baseCaptureSubmitting}
+        error={baseCaptureError}
+        onCancel={() => setBaseCaptureModalOpen(false)}
+        onConfirm={() => void handleConfirmBaseCapture()}
+      />
 
       {clearWarning && (
         <p className="rounded-md bg-alert/10 px-3 py-2 text-sm text-alert">
