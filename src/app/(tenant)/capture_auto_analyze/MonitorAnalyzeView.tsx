@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { buildMonitorPrompt } from "@/lib/monitor/buildMonitorPrompt";
+import { ZoneEditor } from "./ZoneEditor";
 import type { MonitorTickResponse } from "@/lib/monitor/runMonitorTick";
 import type {
   MonitorSeverity,
@@ -37,7 +38,7 @@ const PROCESSED_DONE = "processed";
 const HISTORY_ALL = "all";
 const HISTORY_EVENTS_ONLY = "events";
 
-type TabId = "settings" | "status" | "history" | "images";
+type TabId = "zones" | "settings" | "status" | "history" | "images";
 type ProcessedFilter =
   | typeof PROCESSED_ALL
   | typeof PROCESSED_UNPROCESSED
@@ -882,7 +883,10 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
         固定撮影で蓄積した画像を、画面を開いている間だけ5秒ごとに比較し、変化をAIで解析します。
       </p>
 
-      <div className="mt-6 grid grid-cols-2 gap-2 rounded-lg border border-line bg-white p-1 sm:grid-cols-4">
+      <div className="mt-6 grid grid-cols-2 gap-2 rounded-lg border border-line bg-white p-1 sm:grid-cols-5">
+        <TabButton active={activeTab === "zones"} onClick={() => setActiveTab("zones")}>
+          監視ゾーンの設定
+        </TabButton>
         <TabButton active={activeTab === "settings"} onClick={() => setActiveTab("settings")}>
           監視条件の設定
         </TabButton>
@@ -896,6 +900,18 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
           画像表示
         </TabButton>
       </div>
+
+      {activeTab === "zones" && (
+        <section className="mt-5 rounded-lg border border-line bg-white p-5">
+          <h2 className="flex items-center gap-2 text-base font-semibold text-ink">
+            <ImageIcon className="h-4 w-4 text-signal" strokeWidth={1.75} />
+            監視ゾーンの設定
+          </h2>
+          <div className="mt-4">
+            <ZoneEditor tenantId={tenantId} userId={userId} />
+          </div>
+        </section>
+      )}
 
       {activeTab === "settings" && (
         <section className="mt-5 rounded-lg border border-line bg-white p-5">
