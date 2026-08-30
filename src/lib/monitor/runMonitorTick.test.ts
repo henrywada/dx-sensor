@@ -278,6 +278,8 @@ describe("runMonitorTick", () => {
       expect.objectContaining({
         previousImageBuffer: croppedPrev,
         imageBuffer: croppedCurr,
+        previousMimeType: "image/png",
+        mimeType: "image/png",
       })
     );
   });
