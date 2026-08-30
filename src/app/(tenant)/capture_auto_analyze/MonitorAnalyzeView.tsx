@@ -14,8 +14,11 @@ import type {
 } from "@/lib/monitor/types";
 import {
   archiveCurrentSession,
+  clearCurrentEvents,
+  formatSessionRangeLabel,
   type MonitorSession,
   type MonitorSessionDeps,
+  restoreSessionToCurrent,
   type StopChoice,
   planStopAction,
 } from "@/lib/monitor/monitorSession";
@@ -181,6 +184,10 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
   const [stopChoice, setStopChoice] = useState<StopChoice>("pause");
   const [monitoringLocked, setMonitoringLocked] = useState(false);
   const [historyViewMode, setHistoryViewMode] = useState(false);
+  const [historyListModalOpen, setHistoryListModalOpen] = useState(false);
+  const [savedSessions, setSavedSessions] = useState<MonitorSession[]>([]);
+  const [historyFilesLoading, setHistoryFilesLoading] = useState(false);
+  const [historyFilesError, setHistoryFilesError] = useState<string | null>(null);
 
   const [processedFilter, setProcessedFilter] = useState<ProcessedFilter>(PROCESSED_ALL);
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>(HISTORY_EVENTS_ONLY);
@@ -741,6 +748,48 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
     setMonitoringLocked(plan.shouldLockStartButton);
   }
 
+  async function handleOpenHistoryFiles() {
+    if (
+      !window.confirm(
+        "現在のイベント履歴・画像は削除されます。よろしいですか？"
+      )
+    ) {
+      return;
+    }
+
+    setHistoryFilesError(null);
+    setHistoryFilesLoading(true);
+    try {
+      await clearCurrentEvents(userId, monitorSessionDeps);
+      const sessions = await monitorSessionDeps.listSavedSessions(userId);
+      setSavedSessions(sessions);
+      setHistoryListModalOpen(true);
+      void loadEvents();
+      void loadImages();
+    } catch (err) {
+      setHistoryFilesError(
+        err instanceof Error ? err.message : "履歴ファイルの読み込みに失敗しました"
+      );
+    } finally {
+      setHistoryFilesLoading(false);
+    }
+  }
+
+  async function handleSelectHistorySession(session: MonitorSession) {
+    setHistoryFilesError(null);
+    try {
+      await restoreSessionToCurrent(session.id, tenantId, userId, monitorSessionDeps);
+      setHistoryListModalOpen(false);
+      setHistoryViewMode(true);
+      void loadEvents();
+      void loadImages();
+    } catch (err) {
+      setHistoryFilesError(
+        err instanceof Error ? err.message : "履歴ファイルの復元に失敗しました"
+      );
+    }
+  }
+
   const displayedEvents = useMemo(() => {
     if (historyFilter === HISTORY_ALL) return events;
     return events.filter((event) => isChangeEvent(event.severity));
@@ -1090,14 +1139,31 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
                 {displayedEvents.length > 0 ? `（${displayedEvents.length}件）` : ""}
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => void loadEvents()}
-              className="rounded-md border border-line bg-white px-3 py-2 text-sm font-medium text-ink transition hover:border-signal/50"
-            >
-              更新
-            </button>
+            <div className="flex shrink-0 items-center gap-2">
+              {resolveHistoryFilesButtonVisible(monitoring) && (
+                <button
+                  type="button"
+                  onClick={() => void handleOpenHistoryFiles()}
+                  disabled={historyFilesLoading}
+                  className="rounded-md border border-line bg-white px-3 py-2 text-sm font-medium text-ink transition hover:border-signal/50 disabled:opacity-50"
+                >
+                  履歴ファイルを見る
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => void loadEvents()}
+                className="rounded-md border border-line bg-white px-3 py-2 text-sm font-medium text-ink transition hover:border-signal/50"
+              >
+                更新
+              </button>
+            </div>
           </div>
+          {historyFilesError && (
+            <p className="mt-4 rounded-md bg-alert/10 px-3 py-2 text-sm text-alert">
+              {historyFilesError}
+            </p>
+          )}
           {eventsLoading && <p className="mt-6 text-sm text-ink-soft">読み込み中...</p>}
           {!eventsLoading && displayedEvents.length === 0 && (
             <p className="mt-6 text-sm text-ink-soft">
@@ -1305,6 +1371,51 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
               >
                 実行
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {historyListModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="history-list-modal-title"
+          onClick={() => setHistoryListModalOpen(false)}
+        >
+          <div
+            className="flex max-h-[min(80vh,640px)] w-full max-w-lg flex-col rounded-lg border border-line bg-white shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex shrink-0 items-start justify-between gap-3 border-b border-line px-5 py-3">
+              <h2 id="history-list-modal-title" className="text-base font-semibold text-ink">
+                履歴ファイル
+              </h2>
+              <button
+                type="button"
+                onClick={() => setHistoryListModalOpen(false)}
+                className="text-sm text-ink-soft hover:text-ink"
+              >
+                閉じる
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-1">
+              {savedSessions.length === 0 && (
+                <p className="py-4 text-sm text-ink-soft">保存された履歴ファイルはありません。</p>
+              )}
+              {savedSessions.map((session) => (
+                <button
+                  key={session.id}
+                  type="button"
+                  onClick={() => void handleSelectHistorySession(session)}
+                  className="w-full border-b border-line/70 py-3 text-left last:border-b-0 hover:bg-paper/80"
+                >
+                  <p className="text-sm font-medium text-ink">
+                    {formatSessionRangeLabel(session)}
+                  </p>
+                </button>
+              ))}
             </div>
           </div>
         </div>
