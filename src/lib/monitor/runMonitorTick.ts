@@ -218,11 +218,8 @@ export async function runMonitorTick(
   });
 
   await deps.markCaptureProcessed(currCapture.id);
-  let prevDeleted = false;
-  if (severity === "minor") {
-    // "notify" 判定はBefore/After証拠画像として保持するため削除しない。
-    prevDeleted = await deps.deleteCaptureIfUnreferenced(prevCapture.id);
-  }
+  // "minor"/"notify" はどちらもGemini解析まで進んだ判定であり、イベント履歴の
+  // 比較表示（今回写真↔前回写真）で参照し続けるため、ここでは削除しない。
   return {
     status: "processed",
     severity,
@@ -231,7 +228,7 @@ export async function runMonitorTick(
     currCaptureId: currCapture.id,
     prevCaptureNo,
     currCaptureNo,
-    prevSignedUrl: prevDeleted ? toDataUri(prevFile) : prevSignedUrl,
+    prevSignedUrl,
     currSignedUrl,
     summary: analysis.text,
     eventId,

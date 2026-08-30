@@ -147,7 +147,7 @@ describe("runMonitorTick", () => {
     });
   });
 
-  it("analyzes and deletes the previous capture for minor (non-notified) diffs", async () => {
+  it("analyzes but keeps both capture photos for minor (non-notified) diffs", async () => {
     const deps = createDeps({
       getNextUnprocessedCapture: vi.fn(async () => ({
         id: "curr-capture",
@@ -163,7 +163,6 @@ describe("runMonitorTick", () => {
         raw: {},
         model: "gemini-2.5-flash",
       })),
-      deleteCaptureIfUnreferenced: vi.fn(async () => true),
     });
 
     const result = await runMonitorTick(REQUEST, deps);
@@ -172,7 +171,7 @@ describe("runMonitorTick", () => {
       status: "processed",
       severity: "minor",
       eventId: "event-id",
-      prevSignedUrl: `data:image/jpeg;base64,${Buffer.from("image").toString("base64")}`,
+      prevSignedUrl: "signed:tenant/day/prev.jpg",
     });
     expect(deps.insertChangeEvent).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -181,7 +180,9 @@ describe("runMonitorTick", () => {
       })
     );
     expect(deps.markCaptureProcessed).toHaveBeenCalledWith("curr-capture");
-    expect(deps.deleteCaptureIfUnreferenced).toHaveBeenCalledWith("prev-capture");
+    // 軽微な変化はGemini解析まで進んだ判定なので、比較表示用に両方の画像を残す
+    // （通知対象と同じ扱い。削除するのはskip判定の画像だけ）。
+    expect(deps.deleteCaptureIfUnreferenced).not.toHaveBeenCalled();
   });
 
   it("analyzes, logs cost, and queues email for notify diffs with an email", async () => {
