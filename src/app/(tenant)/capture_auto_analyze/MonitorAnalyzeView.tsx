@@ -764,13 +764,16 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
       const sessions = await monitorSessionDeps.listSavedSessions(userId);
       setSavedSessions(sessions);
       setHistoryListModalOpen(true);
-      void loadEvents();
-      void loadImages();
     } catch (err) {
       setHistoryFilesError(
         err instanceof Error ? err.message : "履歴ファイルの読み込みに失敗しました"
       );
     } finally {
+      // clearCurrentEvents はここまでで既にDB側の削除が反映されている可能性があるため、
+      // 以降の一覧取得(listSavedSessions)が失敗した場合でも、画面上のイベント・画像一覧は
+      // 必ずDBの最新状態に同期させる。
+      void loadEvents();
+      void loadImages();
       setHistoryFilesLoading(false);
     }
   }
