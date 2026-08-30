@@ -646,30 +646,6 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
             </div>
           </div>
 
-          {!settingsLoading && (
-            <div className="mt-4 flex justify-end">
-              <button
-                type="button"
-                onClick={monitoring ? handleStopMonitoring : handleStartMonitoring}
-                className={`inline-flex min-w-44 items-center justify-center gap-2 rounded-md px-5 py-3 text-sm font-medium text-white transition ${
-                  monitoring ? "bg-alert hover:bg-alert/90" : "bg-signal hover:bg-signal/90"
-                }`}
-              >
-                {monitoring ? (
-                  <>
-                    <Square className="h-4 w-4" strokeWidth={1.75} />
-                    監視を停止
-                  </>
-                ) : (
-                  <>
-                    <Play className="h-4 w-4" strokeWidth={1.75} />
-                    監視の開始
-                  </>
-                )}
-              </button>
-            </div>
-          )}
-
           {settingsLoading ? (
             <p className="mt-6 text-sm text-ink-soft">読み込み中...</p>
           ) : (
@@ -766,19 +742,29 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
             <div className="flex min-w-0 items-start gap-3">
               {monitoring && <MonitoringPulse />}
               <div className="min-w-0">
-                <h2 className="flex items-center gap-2 text-base font-semibold text-ink">
-                  <ListChecks className="h-4 w-4 text-signal" strokeWidth={1.75} />
-                  監視状況
-                  {monitoring && (
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-signal/10 px-2 py-0.5 text-xs font-medium text-signal">
-                      <span className="relative flex h-2 w-2">
-                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-signal opacity-60" />
-                        <span className="relative inline-flex h-2 w-2 rounded-full bg-signal" />
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="flex items-center gap-2 text-base font-semibold text-ink">
+                    <ListChecks className="h-4 w-4 text-signal" strokeWidth={1.75} />
+                    監視状況
+                    {monitoring && (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-signal/10 px-2 py-0.5 text-xs font-medium text-signal">
+                        <span className="relative flex h-2 w-2">
+                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-signal opacity-60" />
+                          <span className="relative inline-flex h-2 w-2 rounded-full bg-signal" />
+                        </span>
+                        LIVE
                       </span>
-                      LIVE
-                    </span>
-                  )}
-                </h2>
+                    )}
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => setPromptModalOpen(true)}
+                    className="inline-flex items-center gap-1 rounded-md border border-line bg-white px-2.5 py-1 text-xs font-medium text-ink-soft transition hover:border-signal/50 hover:text-ink"
+                  >
+                    <FileText className="h-3.5 w-3.5" strokeWidth={1.75} />
+                    命令を表示
+                  </button>
+                </div>
                 <p className="mt-1 text-sm text-ink-soft">
                   {monitoring ? "監視中（5秒間隔）" : "停止中"}
                   {tickRunning ? " · 処理中..." : ""}
@@ -791,14 +777,6 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setPromptModalOpen(true)}
-                className="inline-flex items-center gap-2 rounded-md border border-line bg-white px-3 py-2 text-sm font-medium text-ink transition hover:border-signal/50"
-              >
-                <FileText className="h-4 w-4 text-signal" strokeWidth={1.75} />
-                命令を表示
-              </button>
               <button
                 type="button"
                 onClick={monitoring ? handleStopMonitoring : handleStartMonitoring}
@@ -814,7 +792,7 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
                 ) : (
                   <>
                     <Play className="h-4 w-4" strokeWidth={1.75} />
-                    開始
+                    監視の開始
                   </>
                 )}
               </button>
