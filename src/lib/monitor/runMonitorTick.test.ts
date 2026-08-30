@@ -118,7 +118,7 @@ describe("runMonitorTick", () => {
         severity: "skip",
         diffScore: 0.01,
         emailQueued: false,
-        analysisTool: "sharp",
+        analysisTool: "sharp+SSIM+pixelmatch",
       })
     );
     expect(deps.logAnalysisRun).not.toHaveBeenCalled();
@@ -177,7 +177,7 @@ describe("runMonitorTick", () => {
     expect(deps.insertChangeEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         severity: "minor",
-        analysisTool: "sharp → Gemini Vision API (gemini-2.5-flash)",
+        analysisTool: "sharp+SSIM+pixelmatch → Gemini Vision API (gemini-2.5-flash)",
       })
     );
     expect(deps.markCaptureProcessed).toHaveBeenCalledWith("curr-capture");
@@ -234,7 +234,7 @@ describe("runMonitorTick", () => {
       expect.objectContaining({
         severity: "notify",
         emailQueued: true,
-        analysisTool: "sharp → Gemini Vision API (gemini-2.5-flash)",
+        analysisTool: "sharp+SSIM+pixelmatch → Gemini Vision API (gemini-2.5-flash)",
       })
     );
     expect(deps.markCaptureProcessed).toHaveBeenCalledWith("curr-capture");

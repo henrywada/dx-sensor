@@ -73,7 +73,7 @@ export type InsertMonitorChangeEventInput = {
   analysisTool: string;
 };
 
-const DIFF_TOOL_LABEL = "sharp";
+const DIFF_TOOL_LABEL = "sharp+SSIM+pixelmatch";
 
 function buildAnalysisToolLabel(model?: string): string {
   return `${DIFF_TOOL_LABEL} → Gemini Vision API (${model ?? "gemini"})`;
