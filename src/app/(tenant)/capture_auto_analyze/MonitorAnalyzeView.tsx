@@ -626,6 +626,10 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
     if (!monitoring) return;
 
     const tick = () => {
+      // 既にtickが実行中なら、その完了を待っているPromiseを
+      // 上書きしない（runTickは即座に解決する空振りのPromiseを返すため、
+      // 上書きすると停止時の待ち合わせ(handleConfirmStop)が機能しなくなる）。
+      if (tickInFlightRef.current) return;
       const promise = runTickRef.current();
       tickPromiseRef.current = promise;
       void promise.finally(() => {
