@@ -63,13 +63,17 @@ export function ZoneEditor({ tenantId, userId }: ZoneEditorProps) {
           return;
         }
 
-        const [{ data: signed }, { data: zoneRows, error: zonesError }] = await Promise.all([
+        const [
+          { data: signed, error: signedUrlError },
+          { data: zoneRows, error: zonesError },
+        ] = await Promise.all([
           supabase.storage.from("auto-captures").createSignedUrl(photoRow.storage_path, 3600),
           supabase
             .from("monitor_zones")
             .select("zone_x, zone_y, zone_width, zone_height")
             .eq("base_photo_id", photoRow.id),
         ]);
+        if (signedUrlError) throw signedUrlError;
         if (zonesError) throw zonesError;
         if (cancelled) return;
 
@@ -102,6 +106,7 @@ export function ZoneEditor({ tenantId, userId }: ZoneEditorProps) {
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
     const point = pointFromClientOffset(e.clientX, e.clientY, rect);
+    e.currentTarget.setPointerCapture(e.pointerId);
     setDraft({ start: point, current: point });
   }, []);
 
@@ -116,14 +121,18 @@ export function ZoneEditor({ tenantId, userId }: ZoneEditorProps) {
     [draft]
   );
 
-  const handlePointerUp = useCallback(() => {
-    if (!draft) return;
-    const rect = rectFromDrag(draft.start, draft.current);
-    if (isZoneLargeEnough(rect)) {
-      setZones((prev) => [...prev, { localId: crypto.randomUUID(), ...rect }]);
-    }
-    setDraft(null);
-  }, [draft]);
+  const handlePointerUp = useCallback(
+    (e: PointerEvent<HTMLDivElement>) => {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+      if (!draft) return;
+      const rect = rectFromDrag(draft.start, draft.current);
+      if (isZoneLargeEnough(rect)) {
+        setZones((prev) => [...prev, { localId: crypto.randomUUID(), ...rect }]);
+      }
+      setDraft(null);
+    },
+    [draft]
+  );
 
   const handleRemoveZone = useCallback((localId: string) => {
     setZones((prev) => prev.filter((zone) => zone.localId !== localId));
