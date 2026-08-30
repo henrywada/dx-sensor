@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Bell, CircleHelp, FileText, History, ImageIcon, Images, ListChecks, Play, Settings, Square, Wand2 } from "lucide-react";
+import { Bell, CircleHelp, FileText, History, ImageIcon, Images, ListChecks, Play, Settings, Square, Trash2, Wand2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
@@ -15,6 +15,7 @@ import type {
 import {
   archiveCurrentSession,
   clearCurrentEvents,
+  deleteSavedSession,
   formatSessionRangeLabel,
   type MonitorSession,
   type MonitorSessionDeps,
@@ -484,6 +485,14 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
         await supabase.storage.from("auto-captures").remove([data as string]);
         return true;
       },
+
+      async deleteSession(sessionId) {
+        const { error } = await supabase
+          .from("monitor_sessions")
+          .delete()
+          .eq("id", sessionId);
+        if (error) throw new Error(error.message);
+      },
     }),
     [supabase]
   );
@@ -825,6 +834,26 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
     } catch (err) {
       setHistoryFilesError(
         err instanceof Error ? err.message : "履歴ファイルの復元に失敗しました"
+      );
+    }
+  }
+
+  async function handleDeleteHistorySession(session: MonitorSession) {
+    if (
+      !window.confirm(
+        `「${formatSessionRangeLabel(session)}」の履歴ファイルを削除しますか？元に戻せません。`
+      )
+    ) {
+      return;
+    }
+
+    setHistoryFilesError(null);
+    try {
+      await deleteSavedSession(session.id, monitorSessionDeps);
+      setSavedSessions((prev) => prev.filter((s) => s.id !== session.id));
+    } catch (err) {
+      setHistoryFilesError(
+        err instanceof Error ? err.message : "履歴ファイルの削除に失敗しました"
       );
     }
   }
@@ -1444,16 +1473,29 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
                 <p className="py-4 text-sm text-ink-soft">保存された履歴ファイルはありません。</p>
               )}
               {savedSessions.map((session) => (
-                <button
+                <div
                   key={session.id}
-                  type="button"
-                  onClick={() => void handleSelectHistorySession(session)}
-                  className="w-full border-b border-line/70 py-3 text-left last:border-b-0 hover:bg-paper/80"
+                  className="flex items-center gap-1 border-b border-line/70 last:border-b-0"
                 >
-                  <p className="text-sm font-medium text-ink">
-                    {formatSessionRangeLabel(session)}
-                  </p>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleSelectHistorySession(session)}
+                    className="flex-1 py-3 text-left hover:bg-paper/80"
+                  >
+                    <p className="text-sm font-medium text-ink">
+                      {formatSessionRangeLabel(session)}
+                    </p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleDeleteHistorySession(session)}
+                    className="shrink-0 rounded p-1.5 text-ink-soft transition hover:bg-alert/10 hover:text-alert"
+                    aria-label={`「${formatSessionRangeLabel(session)}」を削除`}
+                    title="削除"
+                  >
+                    <Trash2 className="h-4 w-4" strokeWidth={1.75} />
+                  </button>
+                </div>
               ))}
             </div>
           </div>

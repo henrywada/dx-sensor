@@ -86,6 +86,9 @@ export type MonitorSessionDeps = {
     userId: string
   ) => Promise<Array<{ prevCaptureId: string; currCaptureId: string }>>;
   deleteCaptureIfUnreferenced: (captureId: string) => Promise<boolean>;
+  /** 履歴ファイル（セッション）本体を削除する。DB側の外部キーはCASCADE設定のため、
+   *  紐づくmonitor_change_events行も同時に削除される。 */
+  deleteSession: (sessionId: string) => Promise<void>;
 };
 
 /** 「イベント履歴・画像を保存して停止する」: 新規セッション行を作り、現在イベントをタグ付けする。 */
@@ -111,6 +114,28 @@ export async function clearCurrentEvents(
   const deletedRows = await deps.deleteCurrentEvents(userId);
   const captureIds = new Set<string>();
   for (const row of deletedRows) {
+    captureIds.add(row.prevCaptureId);
+    captureIds.add(row.currCaptureId);
+  }
+  await Promise.all(
+    Array.from(captureIds).map((id) => deps.deleteCaptureIfUnreferenced(id))
+  );
+}
+
+/**
+ * 履歴ファイル（セッション）を削除する。セッションが参照していたキャプチャIDは
+ * DB側のCASCADE削除でイベント行ごと消える前に取得しておき、削除後に
+ * 参照されなくなったキャプチャ（画像）を後始末する。
+ */
+export async function deleteSavedSession(
+  sessionId: string,
+  deps: MonitorSessionDeps
+): Promise<void> {
+  const rows = await deps.fetchSessionEvents(sessionId);
+  await deps.deleteSession(sessionId);
+
+  const captureIds = new Set<string>();
+  for (const row of rows) {
     captureIds.add(row.prevCaptureId);
     captureIds.add(row.currCaptureId);
   }

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   archiveCurrentSession,
   clearCurrentEvents,
+  deleteSavedSession,
   formatSessionRangeLabel,
   planStopAction,
   restoreSessionToCurrent,
@@ -17,6 +18,7 @@ function createDeps(overrides: Partial<MonitorSessionDeps> = {}): MonitorSession
     insertCurrentEvents: vi.fn(async () => undefined),
     deleteCurrentEvents: vi.fn(async () => []),
     deleteCaptureIfUnreferenced: vi.fn(async () => false),
+    deleteSession: vi.fn(async () => undefined),
     ...overrides,
   };
 }
@@ -148,5 +150,56 @@ describe("restoreSessionToCurrent", () => {
     await restoreSessionToCurrent("session-1", "tenant-1", "user-1", deps);
 
     expect(deps.insertCurrentEvents).not.toHaveBeenCalled();
+  });
+});
+
+describe("deleteSavedSession", () => {
+  it("セッションが参照していたキャプチャを重複なく後始末してから削除する", async () => {
+    const deps = createDeps({
+      fetchSessionEvents: vi.fn(async () => [
+        {
+          prevCaptureId: "cap-1",
+          currCaptureId: "cap-2",
+          diffScore: 0.1,
+          severity: "notify" as const,
+          aiSummary: "変化を検知",
+          emailQueued: false,
+          analysisTool: "sharp",
+          createdAt: "2026-08-30T08:10:00.000Z",
+        },
+        {
+          prevCaptureId: "cap-2",
+          currCaptureId: "cap-3",
+          diffScore: 0.2,
+          severity: "minor" as const,
+          aiSummary: "軽微な変化",
+          emailQueued: false,
+          analysisTool: "sharp",
+          createdAt: "2026-08-30T08:15:00.000Z",
+        },
+      ]),
+    });
+
+    await deleteSavedSession("session-1", deps);
+
+    expect(deps.fetchSessionEvents).toHaveBeenCalledWith("session-1");
+    // 削除前にキャプチャ参照を取得しておき、削除後にそのIDで後始末する
+    // （session削除はDB側でイベント行をCASCADE削除するため、削除後には
+    // 参照を取得できなくなる）。
+    expect(deps.deleteSession).toHaveBeenCalledWith("session-1");
+    expect(deps.deleteCaptureIfUnreferenced).toHaveBeenCalledTimes(3);
+    const calledIds = (deps.deleteCaptureIfUnreferenced as ReturnType<typeof vi.fn>).mock.calls
+      .map((call: any[]) => call[0] as string)
+      .sort();
+    expect(calledIds).toEqual(["cap-1", "cap-2", "cap-3"]);
+  });
+
+  it("イベントが無くてもセッション自体は削除する", async () => {
+    const deps = createDeps({ fetchSessionEvents: vi.fn(async () => []) });
+
+    await deleteSavedSession("session-1", deps);
+
+    expect(deps.deleteSession).toHaveBeenCalledWith("session-1");
+    expect(deps.deleteCaptureIfUnreferenced).not.toHaveBeenCalled();
   });
 });
