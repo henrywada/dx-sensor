@@ -141,13 +141,20 @@ export async function POST(req: Request) {
     },
 
     async getZones() {
+      // ベストエフォート：ゾーン取得に失敗しても監視tick全体を失敗させない
+      // （ゾーン未設定時は既存の全体画像解析にフォールバックする、既にサポート
+      // 済みの安全な状態のため）。監視ゾーン機能を使っていないユーザーのtickまで
+      // このクエリの失敗で巻き込まないようにする。
       const { data, error } = await supabase
         .from("monitor_zones")
         .select("zone_x, zone_y, zone_width, zone_height")
         .eq("tenant_id", tenant.tenantId)
         .eq("user_id", viewer.userId);
 
-      if (error) throw new MonitorTickError(error.message, 500);
+      if (error) {
+        console.error("getZones failed, falling back to no zones", error);
+        return [];
+      }
       return (data ?? []).map((row) => ({
         x: row.zone_x as number,
         y: row.zone_y as number,

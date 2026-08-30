@@ -27,6 +27,7 @@ type BasePhoto = {
 export function ZoneEditor({ tenantId, userId }: ZoneEditorProps) {
   const supabase = useMemo(() => createClient(), []);
   const containerRef = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
 
   const [loading, setLoading] = useState(true);
   const [basePhoto, setBasePhoto] = useState<BasePhoto | null>(null);
@@ -103,7 +104,13 @@ export function ZoneEditor({ tenantId, userId }: ZoneEditorProps) {
   }, [supabase, tenantId, userId]);
 
   const handlePointerDown = useCallback((e: PointerEvent<HTMLDivElement>) => {
-    const rect = containerRef.current?.getBoundingClientRect();
+    // 削除(×)ボタンはドラッグ用コンテナの子要素のため、そこへのpointerdownも
+    // バブリングしてここに届く。ボタン起点の場合だけ除外する
+    // （target !== currentTarget での判定だと、コンテナの全面を覆っている
+    // <img>自体へのpointerdownまで弾いてしまい、ゾーン作成が機能しなくなる
+    // ため使わない）。
+    if (e.target instanceof HTMLElement && e.target.closest("button")) return;
+    const rect = imgRef.current?.getBoundingClientRect();
     if (!rect) return;
     const point = pointFromClientOffset(e.clientX, e.clientY, rect);
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -113,7 +120,7 @@ export function ZoneEditor({ tenantId, userId }: ZoneEditorProps) {
   const handlePointerMove = useCallback(
     (e: PointerEvent<HTMLDivElement>) => {
       if (!draft) return;
-      const rect = containerRef.current?.getBoundingClientRect();
+      const rect = imgRef.current?.getBoundingClientRect();
       if (!rect) return;
       const point = pointFromClientOffset(e.clientX, e.clientY, rect);
       setDraft({ start: draft.start, current: point });
@@ -206,6 +213,7 @@ export function ZoneEditor({ tenantId, userId }: ZoneEditorProps) {
       >
         {/* eslint-disable-next-line @next/next/no-img-element -- 署名URLは一時的なものでnext/imageの最適化対象にしない */}
         <img
+          ref={imgRef}
           src={basePhoto.signedUrl}
           alt="基本写真"
           className="block w-full"

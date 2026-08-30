@@ -149,17 +149,17 @@ export async function runMonitorTick(
     throw new MonitorTickError("前回画像が見つかりません", 404);
   }
 
-  const [prevFile, currFile, prevSignedUrl, prevCaptureNo] = await Promise.all([
+  const [prevFile, currFile, prevSignedUrl, prevCaptureNo, zones] = await Promise.all([
     deps.downloadCapture(prevCapture.storagePath),
     deps.downloadCapture(currCapture.storagePath),
     deps.createSignedUrl(prevCapture.storagePath),
     deps.getCaptureOrdinal(prevCapture.id),
+    deps.getZones(),
   ]);
 
   // 監視ゾーンが指定されていれば、以降の差分計算・AI解析はゾーン部分だけを
   // 切り出した画像で行う(背景ノイズを除外し検知精度を上げるため)。
   // ゾーンが無い場合は従来通り全体画像で解析する。
-  const zones = await deps.getZones();
   const cropToZones = deps.cropToZones ?? buildZoneComposite;
   const prevForAnalysis =
     zones.length > 0 ? await cropToZones(prevFile.buffer, zones) : prevFile.buffer;

@@ -506,35 +506,46 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
   // ログ件数はイベント行数、画像枚数はprev/curr_capture_idの重複を除いた件数とする。
   const loadSavedSessionsWithCounts = useCallback(
     async (ownerId: string): Promise<SavedSession[]> => {
-      const [
-        { data: sessionRows, error: sessionsError },
-        { data: eventRows, error: eventsError },
-      ] = await Promise.all([
-        supabase
-          .from("monitor_sessions")
-          .select("id, started_at, stopped_at")
-          .eq("user_id", ownerId)
-          .order("started_at", { ascending: false }),
-        supabase
+      const { data: sessionRows, error: sessionsError } = await supabase
+        .from("monitor_sessions")
+        .select("id, started_at, stopped_at")
+        .eq("user_id", ownerId)
+        .order("started_at", { ascending: false });
+      if (sessionsError) throw new Error(sessionsError.message);
+
+      // 1リクエストの上限行数（PostgRESTのmax_rows等）を超えるユーザーでも
+      // 件数が黙って欠落しないよう、.range()でページングして全件取得する。
+      const PAGE_SIZE = 1000;
+      type EventCountRow = {
+        session_id: string;
+        prev_capture_id: string | null;
+        curr_capture_id: string | null;
+      };
+      const eventRows: EventCountRow[] = [];
+      for (let from = 0; ; from += PAGE_SIZE) {
+        const { data: page, error: pageError } = await supabase
           .from("monitor_change_events")
           .select("session_id, prev_capture_id, curr_capture_id")
           .eq("user_id", ownerId)
-          .not("session_id", "is", null),
-      ]);
-      if (sessionsError) throw new Error(sessionsError.message);
-      if (eventsError) throw new Error(eventsError.message);
+          .not("session_id", "is", null)
+          .range(from, from + PAGE_SIZE - 1);
+        if (pageError) throw new Error(pageError.message);
+        const rows = (page ?? []) as EventCountRow[];
+        eventRows.push(...rows);
+        if (rows.length < PAGE_SIZE) break;
+      }
 
       const countsBySession = new Map<
         string,
         { logCount: number; captureIds: Set<string> }
       >();
-      for (const row of eventRows ?? []) {
-        const sessionId = row.session_id as string;
+      for (const row of eventRows) {
+        const sessionId = row.session_id;
         const entry =
           countsBySession.get(sessionId) ?? { logCount: 0, captureIds: new Set<string>() };
         entry.logCount += 1;
-        if (row.prev_capture_id) entry.captureIds.add(row.prev_capture_id as string);
-        if (row.curr_capture_id) entry.captureIds.add(row.curr_capture_id as string);
+        if (row.prev_capture_id) entry.captureIds.add(row.prev_capture_id);
+        if (row.curr_capture_id) entry.captureIds.add(row.curr_capture_id);
         countsBySession.set(sessionId, entry);
       }
 
