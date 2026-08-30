@@ -198,6 +198,8 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
 
   const lastCurrCaptureIdRef = useRef<string | null>(null);
   const tickInFlightRef = useRef(false);
+  /** 実行中のtickのPromise（停止時に完了を待ち合わせるため）。 */
+  const tickPromiseRef = useRef<Promise<void> | null>(null);
   const activeTabRef = useRef(activeTab);
   activeTabRef.current = activeTab;
 
@@ -389,14 +391,17 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
         return { id: data.id };
       },
 
-      async tagCurrentEventsToSession({ userId: ownerId, sessionId, startedAt, stoppedAt }) {
+      // created_at による期間の絞り込みはあえて行わない。
+      // 「session_id is null」の集合がそのまま「現在（未アーカイブ）」のイベントであり、
+      // 期間で更に絞ると、ブラウザ時計とPostgresの now() のずれによって
+      // 境界付近のイベントがアーカイブから取りこぼされる（そしてそのまま
+      // 次回リロードの clearOwnMonitorEvents で気づかれずに消える）。
+      async tagCurrentEventsToSession({ userId: ownerId, sessionId }) {
         const { error } = await supabase
           .from("monitor_change_events")
           .update({ session_id: sessionId })
           .eq("user_id", ownerId)
-          .is("session_id", null)
-          .gte("created_at", startedAt)
-          .lte("created_at", stoppedAt);
+          .is("session_id", null);
         if (error) throw new Error(error.message);
       },
 
@@ -620,7 +625,15 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
   useEffect(() => {
     if (!monitoring) return;
 
-    const tick = () => void runTickRef.current();
+    const tick = () => {
+      const promise = runTickRef.current();
+      tickPromiseRef.current = promise;
+      void promise.finally(() => {
+        if (tickPromiseRef.current === promise) {
+          tickPromiseRef.current = null;
+        }
+      });
+    };
     void tick();
     const timerId = window.setInterval(tick, TICK_INTERVAL_MS);
 
@@ -714,11 +727,19 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
 
   async function handleConfirmStop() {
     const plan = planStopAction(stopChoice);
-    const startedAt = monitoringStartedAt;
-    const stoppedAt = new Date().toISOString();
 
     setMonitoring(false);
     setStopModalOpen(false);
+
+    // 実行中のtick（画像取得・AI解析）が完了するまで待つ。待たずに停止すると、
+    // tickが停止後にイベントをINSERTし、アーカイブの対象から漏れたまま
+    // 「現在」プールに取り残される（次回リロードで気づかれずに消える）。
+    if (tickPromiseRef.current) {
+      await tickPromiseRef.current;
+    }
+
+    const startedAt = monitoringStartedAt;
+    const stoppedAt = new Date().toISOString();
 
     if (plan.shouldArchive && startedAt) {
       try {
@@ -728,11 +749,16 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
         );
         setLastMessage("監視を停止し、イベント履歴・画像を履歴ファイルに保存しました。");
       } catch (err) {
+        // 保存に失敗した場合は「一時停止」相当として扱う。開始ボタンをロックせず、
+        // monitoringStartedAt も維持することで、監視を再開してもう一度
+        // 「保存して停止」を試せるようにする（イベントを取りこぼさない）。
         setLastMessage(
           err instanceof Error
-            ? `履歴の保存に失敗しました: ${err.message}`
-            : "履歴の保存に失敗しました。"
+            ? `履歴の保存に失敗しました: ${err.message}（再開すれば再試行できます）`
+            : "履歴の保存に失敗しました。（再開すれば再試行できます）"
         );
+        setMonitoringLocked(false);
+        return;
       }
     } else if (plan.shouldLockStartButton) {
       setLastMessage("監視を停止しました。");
@@ -761,6 +787,12 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
     setHistoryFilesLoading(true);
     try {
       await clearCurrentEvents(userId, monitorSessionDeps);
+      // 現在のイベント・画像を消した以上、直前の監視セッションの「再開」は成立しない
+      // （lastCurrCaptureIdRef が指すキャプチャもここで削除され得るため、そのまま
+      // 再開すると tick が「前回画像が見つかりません」で回り続ける）。
+      // monitoringStartedAt を null に戻すことで、次の handleStartMonitoring が
+      // 新規開始パスに入り、カウント・比較画像・lastCurrCaptureIdRef をリセットする。
+      setMonitoringStartedAt(null);
       const sessions = await monitorSessionDeps.listSavedSessions(userId);
       setSavedSessions(sessions);
       setHistoryListModalOpen(true);
