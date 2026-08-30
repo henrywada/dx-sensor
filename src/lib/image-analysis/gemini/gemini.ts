@@ -59,5 +59,5 @@ export async function analyzeWithGemini(
     .trim();
 
   if (!text) throw new Error("Gemini API returned an empty response");
-  return { text, raw: data };
+  return { text, raw: data, model };
 }

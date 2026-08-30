@@ -191,6 +191,7 @@ export async function POST(req: Request) {
           severity: input.severity,
           ai_summary: input.summary,
           email_queued: input.emailQueued,
+          analysis_tool: input.analysisTool,
         })
         .select("id")
         .single();

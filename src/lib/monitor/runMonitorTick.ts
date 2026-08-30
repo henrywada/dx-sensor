@@ -69,7 +69,15 @@ export type InsertMonitorChangeEventInput = {
   severity: MonitorSeverity;
   summary: string;
   emailQueued: boolean;
+  /** 判定に使った解析ツールの表示用文字列（例: "sharp" / "sharp → Gemini Vision API (gemini-2.5-flash)"）。 */
+  analysisTool: string;
 };
+
+const DIFF_TOOL_LABEL = "sharp";
+
+function buildAnalysisToolLabel(model?: string): string {
+  return `${DIFF_TOOL_LABEL} → Gemini Vision API (${model ?? "gemini"})`;
+}
 
 export type RunMonitorTickDeps = {
   getNextUnprocessedCapture: (excludeId: string | null) => Promise<MonitorCapture | null>;
@@ -157,6 +165,7 @@ export async function runMonitorTick(
       severity,
       summary: "変化が小さいため通知対象外です（処理は実行済み）",
       emailQueued: false,
+      analysisTool: DIFF_TOOL_LABEL,
     });
     await deps.markCaptureProcessed(currCapture.id);
     const prevDeleted = await deps.deleteCaptureIfUnreferenced(prevCapture.id);
@@ -197,6 +206,7 @@ export async function runMonitorTick(
     severity,
     summary: analysis.text,
     emailQueued: severity === "notify" && Boolean(request.email?.trim()),
+    analysisTool: buildAnalysisToolLabel(analysis.model),
   });
 
   const usage = extractTokenUsage("gemini", analysis.raw);

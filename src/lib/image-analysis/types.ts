@@ -22,6 +22,8 @@ export interface VisionAnalyzeResult {
   raw?: unknown;
   /** 消費概算コスト（円）。算出できない場合は null/undefined */
   estimatedCostYen?: number | null;
+  /** 実際に呼び出したモデル名（例: "gemini-2.5-flash"）。表示・記録用。 */
+  model?: string;
 }
 
 export type FetchImpl = (url: string, init?: RequestInit) => Promise<Response>;

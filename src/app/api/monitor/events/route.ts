@@ -12,7 +12,7 @@ export async function GET() {
   const { data, error } = await supabase
     .from("monitor_change_events")
     .select(
-      "id, user_id, tenant_id, prev_capture_id, curr_capture_id, diff_score, severity, ai_summary, email_queued, created_at"
+      "id, user_id, tenant_id, prev_capture_id, curr_capture_id, diff_score, severity, ai_summary, email_queued, analysis_tool, created_at"
     )
     .eq("user_id", viewer.userId)
     .order("created_at", { ascending: false });

@@ -25,7 +25,11 @@ function createDeps(overrides: Partial<RunMonitorTickDeps> = {}): RunMonitorTick
     })),
     createSignedUrl: vi.fn(async (storagePath: string) => `signed:${storagePath}`),
     diffScore: vi.fn(async () => 0),
-    analyzeImages: vi.fn(async () => ({ text: "変化があります", raw: {} })),
+    analyzeImages: vi.fn(async () => ({
+      text: "変化があります",
+      raw: {},
+      model: "gemini-2.5-flash",
+    })),
     insertChangeEvent: vi.fn(async () => "event-id"),
     logAnalysisRun: vi.fn(async () => undefined),
     deleteCaptureIfUnreferenced: vi.fn(async () => false),
@@ -114,6 +118,7 @@ describe("runMonitorTick", () => {
         severity: "skip",
         diffScore: 0.01,
         emailQueued: false,
+        analysisTool: "sharp",
       })
     );
     expect(deps.logAnalysisRun).not.toHaveBeenCalled();
@@ -156,6 +161,7 @@ describe("runMonitorTick", () => {
       analyzeImages: vi.fn(async () => ({
         text: "軽微な変化があります",
         raw: {},
+        model: "gemini-2.5-flash",
       })),
       deleteCaptureIfUnreferenced: vi.fn(async () => true),
     });
@@ -169,7 +175,10 @@ describe("runMonitorTick", () => {
       prevSignedUrl: `data:image/jpeg;base64,${Buffer.from("image").toString("base64")}`,
     });
     expect(deps.insertChangeEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ severity: "minor" })
+      expect.objectContaining({
+        severity: "minor",
+        analysisTool: "sharp → Gemini Vision API (gemini-2.5-flash)",
+      })
     );
     expect(deps.markCaptureProcessed).toHaveBeenCalledWith("curr-capture");
     expect(deps.deleteCaptureIfUnreferenced).toHaveBeenCalledWith("prev-capture");
@@ -194,6 +203,7 @@ describe("runMonitorTick", () => {
             candidatesTokenCount: 20,
           },
         },
+        model: "gemini-2.5-flash",
       })),
     });
 
@@ -224,6 +234,7 @@ describe("runMonitorTick", () => {
       expect.objectContaining({
         severity: "notify",
         emailQueued: true,
+        analysisTool: "sharp → Gemini Vision API (gemini-2.5-flash)",
       })
     );
     expect(deps.markCaptureProcessed).toHaveBeenCalledWith("curr-capture");

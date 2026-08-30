@@ -26,6 +26,7 @@ describe("analyzeWithGemini", () => {
     );
 
     expect(result.text).toBe("通路が混雑しています。");
+    expect(result.model).toBe("gemini-2.5-flash");
     expect(fetchMock.mock.calls[0][0]).toContain(
       "generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
     );

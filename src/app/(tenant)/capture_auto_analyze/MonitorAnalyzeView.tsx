@@ -41,6 +41,7 @@ type MonitorEvent = {
   diff_score: number | null;
   ai_summary: string | null;
   email_queued: boolean;
+  analysis_tool: string | null;
   created_at: string;
   prev_capture_id?: string | null;
   curr_capture_id?: string | null;
@@ -57,6 +58,7 @@ function makeWaitingEvent(): MonitorEvent {
     diff_score: null,
     ai_summary: "処理する画像がありません",
     email_queued: false,
+    analysis_tool: null,
     created_at: new Date().toISOString(),
     prev_capture_id: null,
     curr_capture_id: null,
@@ -957,6 +959,7 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
                     {event.diff_score !== null && (
                       <span>差分 {Number(event.diff_score).toFixed(4)}</span>
                     )}
+                    {event.analysis_tool && <span>{event.analysis_tool}</span>}
                     {event.prev_capture_no != null && event.curr_capture_no != null && (
                       <span className="inline-flex items-center gap-1">
                         <span className="font-en">
