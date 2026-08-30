@@ -15,6 +15,7 @@ export async function GET() {
       "id, user_id, tenant_id, prev_capture_id, curr_capture_id, diff_score, severity, ai_summary, email_queued, analysis_tool, created_at"
     )
     .eq("user_id", viewer.userId)
+    .is("session_id", null)
     .order("created_at", { ascending: false });
 
   if (error) {

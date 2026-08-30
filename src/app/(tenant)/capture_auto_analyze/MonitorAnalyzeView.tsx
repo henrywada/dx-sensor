@@ -202,14 +202,16 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
     }
   }, []);
 
-  // /capture_auto と同様、画面を開くたびに自分の古いイベント履歴を
+  // /capture_auto と同様、画面を開くたびに自分の古い「現在」イベント履歴を
   // クリアする（ベストエフォート。失敗しても画面の表示は続行する）。
+  // アーカイブ済み（session_id が付いた）履歴ファイルはここでは消さない。
   const clearOwnMonitorEvents = useCallback(async () => {
     try {
       const { error } = await supabase
         .from("monitor_change_events")
         .delete()
-        .eq("user_id", userId);
+        .eq("user_id", userId)
+        .is("session_id", null);
       if (error) throw error;
     } catch (err) {
       console.error("clearOwnMonitorEvents failed", err);
