@@ -30,6 +30,7 @@ function toPixelRect(
  * 1枚の画像へ合成する（既存のdiffScore計算・Gemini解析は「1枚の画像」を
  * 前提にしたシグネチャのままにしたいため）。ゾーンが無指定なら元画像を
  * そのまま返す（従来通り全体画像で解析する）。
+ * ゾーン指定時はPNG形式で返す。ゾーン未指定時は入力バッファをそのまま返す（元の形式を保持する）。
  */
 export async function buildZoneComposite(
   imageBuffer: Buffer,
