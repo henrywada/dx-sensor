@@ -25,6 +25,7 @@ function createDeps(overrides: Partial<RunMonitorTickDeps> = {}): RunMonitorTick
     })),
     createSignedUrl: vi.fn(async (storagePath: string) => `signed:${storagePath}`),
     diffScore: vi.fn(async () => 0),
+    getZones: vi.fn(async () => []),
     analyzeImages: vi.fn(async () => ({
       text: "変化があります",
       raw: {},
@@ -240,5 +241,69 @@ describe("runMonitorTick", () => {
     );
     expect(deps.markCaptureProcessed).toHaveBeenCalledWith("curr-capture");
     expect(deps.deleteCaptureIfUnreferenced).not.toHaveBeenCalled();
+  });
+
+  it("監視ゾーンが設定されていれば、切り出した画像でdiffScoreとanalyzeImagesを呼ぶ", async () => {
+    const zones = [{ x: 0, y: 0, width: 0.5, height: 0.5 }];
+    const croppedPrev = Buffer.from("cropped-prev");
+    const croppedCurr = Buffer.from("cropped-curr");
+    const cropToZones = vi.fn(async (buffer: Buffer) =>
+      buffer.toString() === "prev-image" ? croppedPrev : croppedCurr
+    );
+
+    const deps = createDeps({
+      getNextUnprocessedCapture: vi.fn(async () => ({
+        id: "curr-capture",
+        storagePath: "tenant/day/curr.jpg",
+      })),
+      getCaptureById: vi.fn(async () => ({
+        id: "prev-capture",
+        storagePath: "tenant/day/prev.jpg",
+      })),
+      downloadCapture: vi.fn(async (storagePath: string) => ({
+        buffer: Buffer.from(storagePath.includes("prev") ? "prev-image" : "curr-image"),
+        mimeType: "image/jpeg",
+      })),
+      getZones: vi.fn(async () => zones),
+      cropToZones,
+      diffScore: vi.fn(async () => 0.08),
+    });
+
+    await runMonitorTick(REQUEST, deps);
+
+    expect(cropToZones).toHaveBeenCalledWith(Buffer.from("prev-image"), zones);
+    expect(cropToZones).toHaveBeenCalledWith(Buffer.from("curr-image"), zones);
+    expect(deps.diffScore).toHaveBeenCalledWith(croppedPrev, croppedCurr);
+    expect(deps.analyzeImages).toHaveBeenCalledWith(
+      expect.objectContaining({
+        previousImageBuffer: croppedPrev,
+        imageBuffer: croppedCurr,
+      })
+    );
+  });
+
+  it("監視ゾーンが無ければ元の画像でdiffScoreとanalyzeImagesを呼ぶ", async () => {
+    const cropToZones = vi.fn();
+    const deps = createDeps({
+      getNextUnprocessedCapture: vi.fn(async () => ({
+        id: "curr-capture",
+        storagePath: "tenant/day/curr.jpg",
+      })),
+      getCaptureById: vi.fn(async () => ({
+        id: "prev-capture",
+        storagePath: "tenant/day/prev.jpg",
+      })),
+      getZones: vi.fn(async () => []),
+      cropToZones,
+      diffScore: vi.fn(async () => 0.08),
+    });
+
+    await runMonitorTick(REQUEST, deps);
+
+    expect(cropToZones).not.toHaveBeenCalled();
+    expect(deps.diffScore).toHaveBeenCalledWith(
+      Buffer.from("image"),
+      Buffer.from("image")
+    );
   });
 });

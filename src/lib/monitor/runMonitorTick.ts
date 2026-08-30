@@ -1,3 +1,4 @@
+import { buildZoneComposite, type NormalizedZoneRect } from "@/lib/change-detection/zoneCrop";
 import { frameDiffScore } from "@/lib/change-detection/frameDiff";
 import { estimateCostYen, extractTokenUsage } from "@/lib/image-analysis/estimateCostYen";
 import type { VisionAnalyzeResult } from "@/lib/image-analysis/types";
@@ -87,6 +88,10 @@ export type RunMonitorTickDeps = {
   downloadCapture: (storagePath: string) => Promise<DownloadedCapture>;
   createSignedUrl: (storagePath: string) => Promise<string | null>;
   diffScore?: (prev: Buffer, curr: Buffer) => Promise<number>;
+  /** 現在有効な監視ゾーン一覧（無ければ空配列）。 */
+  getZones: () => Promise<NormalizedZoneRect[]>;
+  /** ゾーンで画像を切り出す処理（省略時は buildZoneComposite を使う）。 */
+  cropToZones?: (buffer: Buffer, zones: NormalizedZoneRect[]) => Promise<Buffer>;
   analyzeImages: (input: AnalyzeMonitorImagesInput) => Promise<VisionAnalyzeResult>;
   insertChangeEvent: (input: InsertMonitorChangeEventInput) => Promise<string>;
   logAnalysisRun: (input: LogAnalysisRunInput) => Promise<void>;
@@ -151,9 +156,19 @@ export async function runMonitorTick(
     deps.getCaptureOrdinal(prevCapture.id),
   ]);
 
+  // 監視ゾーンが指定されていれば、以降の差分計算・AI解析はゾーン部分だけを
+  // 切り出した画像で行う(背景ノイズを除外し検知精度を上げるため)。
+  // ゾーンが無い場合は従来通り全体画像で解析する。
+  const zones = await deps.getZones();
+  const cropToZones = deps.cropToZones ?? buildZoneComposite;
+  const prevForAnalysis =
+    zones.length > 0 ? await cropToZones(prevFile.buffer, zones) : prevFile.buffer;
+  const currForAnalysis =
+    zones.length > 0 ? await cropToZones(currFile.buffer, zones) : currFile.buffer;
+
   const diffScore = await (deps.diffScore ?? frameDiffScore)(
-    prevFile.buffer,
-    currFile.buffer
+    prevForAnalysis,
+    currForAnalysis
   );
   const severity = classifyDiffScore(diffScore);
 
@@ -192,12 +207,17 @@ export async function runMonitorTick(
     labels: request.labels,
     values: request.slotValues,
   });
+  // buildZoneComposite(既定のcropToZones)は常にPNGへ再エンコードするため、
+  // ゾーン切り出しを行った場合はmimeTypeも"image/png"に揃える
+  // (切り出し無しの場合は元画像のmimeTypeのまま)。
+  const prevMimeTypeForAnalysis = zones.length > 0 ? "image/png" : prevFile.mimeType;
+  const currMimeTypeForAnalysis = zones.length > 0 ? "image/png" : currFile.mimeType;
   const analysis = await deps.analyzeImages({
     prompt,
-    previousImageBuffer: prevFile.buffer,
-    previousMimeType: prevFile.mimeType,
-    imageBuffer: currFile.buffer,
-    mimeType: currFile.mimeType,
+    previousImageBuffer: prevForAnalysis,
+    previousMimeType: prevMimeTypeForAnalysis,
+    imageBuffer: currForAnalysis,
+    mimeType: currMimeTypeForAnalysis,
   });
   const eventId = await deps.insertChangeEvent({
     prevCaptureId: prevCapture.id,

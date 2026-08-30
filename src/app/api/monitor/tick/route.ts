@@ -140,6 +140,22 @@ export async function POST(req: Request) {
       }
     },
 
+    async getZones() {
+      const { data, error } = await supabase
+        .from("monitor_zones")
+        .select("zone_x, zone_y, zone_width, zone_height")
+        .eq("tenant_id", tenant.tenantId)
+        .eq("user_id", viewer.userId);
+
+      if (error) throw new MonitorTickError(error.message, 500);
+      return (data ?? []).map((row) => ({
+        x: row.zone_x as number,
+        y: row.zone_y as number,
+        width: row.zone_width as number,
+        height: row.zone_height as number,
+      }));
+    },
+
     async downloadCapture(storagePath: string): Promise<DownloadedCapture> {
       const { data, error } = await supabase.storage
         .from(AUTO_CAPTURES_BUCKET)
