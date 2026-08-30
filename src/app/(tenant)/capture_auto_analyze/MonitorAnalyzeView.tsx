@@ -12,6 +12,17 @@ import type {
   MonitorUserSettings,
   SystemMonitorTemplate,
 } from "@/lib/monitor/types";
+import {
+  archiveCurrentSession,
+  type MonitorSession,
+  type MonitorSessionDeps,
+  type StopChoice,
+  planStopAction,
+} from "@/lib/monitor/monitorSession";
+import {
+  resolveHistoryFilesButtonVisible,
+  resolveStartButtonState,
+} from "@/lib/monitor/monitorButtonState";
 
 const SLOT_COUNT = 10;
 const TICK_INTERVAL_MS = 5_000;
@@ -165,6 +176,11 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
   const [eventsLoading, setEventsLoading] = useState(false);
   const [tickRunning, setTickRunning] = useState(false);
   const [tickError, setTickError] = useState<string | null>(null);
+
+  const [stopModalOpen, setStopModalOpen] = useState(false);
+  const [stopChoice, setStopChoice] = useState<StopChoice>("pause");
+  const [monitoringLocked, setMonitoringLocked] = useState(false);
+  const [historyViewMode, setHistoryViewMode] = useState(false);
 
   const [processedFilter, setProcessedFilter] = useState<ProcessedFilter>(PROCESSED_ALL);
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>(HISTORY_EVENTS_ONLY);
@@ -348,6 +364,117 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
     setImages(withUrls);
     setImagesLoading(false);
   }, [attachSignedUrls, processedFilter, supabase, tenantId, userId]);
+
+  const monitorSessionDeps = useMemo<MonitorSessionDeps>(
+    () => ({
+      async createSession({ tenantId, userId: ownerId, startedAt, stoppedAt }) {
+        const { data, error } = await supabase
+          .from("monitor_sessions")
+          .insert({
+            tenant_id: tenantId,
+            user_id: ownerId,
+            started_at: startedAt,
+            stopped_at: stoppedAt,
+          })
+          .select("id")
+          .single();
+        if (error || !data) throw new Error(error?.message ?? "履歴の保存に失敗しました");
+        return { id: data.id };
+      },
+
+      async tagCurrentEventsToSession({ userId: ownerId, sessionId, startedAt, stoppedAt }) {
+        const { error } = await supabase
+          .from("monitor_change_events")
+          .update({ session_id: sessionId })
+          .eq("user_id", ownerId)
+          .is("session_id", null)
+          .gte("created_at", startedAt)
+          .lte("created_at", stoppedAt);
+        if (error) throw new Error(error.message);
+      },
+
+      async listSavedSessions(ownerId): Promise<MonitorSession[]> {
+        const { data, error } = await supabase
+          .from("monitor_sessions")
+          .select("id, started_at, stopped_at")
+          .eq("user_id", ownerId)
+          .order("started_at", { ascending: false });
+        if (error) throw new Error(error.message);
+        return (data ?? []).map((row) => ({
+          id: row.id as string,
+          startedAt: row.started_at as string,
+          stoppedAt: row.stopped_at as string,
+        }));
+      },
+
+      async fetchSessionEvents(sessionId) {
+        const { data, error } = await supabase
+          .from("monitor_change_events")
+          .select(
+            "prev_capture_id, curr_capture_id, diff_score, severity, ai_summary, email_queued, analysis_tool, created_at"
+          )
+          .eq("session_id", sessionId);
+        if (error) throw new Error(error.message);
+        return (data ?? []).map((row) => ({
+          prevCaptureId: row.prev_capture_id as string,
+          currCaptureId: row.curr_capture_id as string,
+          diffScore: row.diff_score as number,
+          severity: row.severity as "skip" | "minor" | "notify",
+          aiSummary: row.ai_summary as string | null,
+          emailQueued: row.email_queued as boolean,
+          analysisTool: row.analysis_tool as string | null,
+          createdAt: row.created_at as string,
+        }));
+      },
+
+      async insertCurrentEvents({ tenantId, userId: ownerId, rows }) {
+        const { error } = await supabase.from("monitor_change_events").insert(
+          rows.map((row) => ({
+            tenant_id: tenantId,
+            user_id: ownerId,
+            prev_capture_id: row.prevCaptureId,
+            curr_capture_id: row.currCaptureId,
+            diff_score: row.diffScore,
+            severity: row.severity,
+            ai_summary: row.aiSummary,
+            email_queued: row.emailQueued,
+            analysis_tool: row.analysisTool,
+            created_at: row.createdAt,
+            session_id: null,
+          }))
+        );
+        if (error) throw new Error(error.message);
+      },
+
+      async deleteCurrentEvents(ownerId) {
+        const { data, error } = await supabase
+          .from("monitor_change_events")
+          .delete()
+          .eq("user_id", ownerId)
+          .is("session_id", null)
+          .select("prev_capture_id, curr_capture_id");
+        if (error) throw new Error(error.message);
+        return (data ?? []).map((row) => ({
+          prevCaptureId: row.prev_capture_id as string,
+          currCaptureId: row.curr_capture_id as string,
+        }));
+      },
+
+      async deleteCaptureIfUnreferenced(captureId) {
+        const { data, error } = await supabase.rpc("delete_capture_if_unreferenced", {
+          p_capture_id: captureId,
+        });
+        if (error) {
+          console.error("deleteCaptureIfUnreferenced failed", error);
+          return false;
+        }
+        if (!data) return false;
+        await supabase.storage.from("auto-captures").remove([data as string]);
+        return true;
+      },
+    }),
+    [supabase]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -547,25 +674,71 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
   }
 
   function handleStartMonitoring() {
-    const startedAt = new Date().toISOString();
+    // monitoringStartedAt が既に設定されている＝一時停止からの再開。
+    // アーカイブ時の「開始時間」を保つため、また直前の比較画像・カウントを
+    // 失わないため、新規開始のときだけ状態を全リセットする。
+    const isFreshStart = monitoringStartedAt === null;
+    const startedAt = monitoringStartedAt ?? new Date().toISOString();
+
     setMonitoringStartedAt(startedAt);
     setMonitoring(true);
     setActiveTab("status");
-    setLastSeverity(null);
-    setLastDiffScore(null);
-    setLastMessage("監視を開始しました。次の画像を確認しています。");
     setTickError(null);
-    setPrevImageUrl(null);
-    setCurrImageUrl(null);
-    setPrevImageNo(null);
-    setCurrImageNo(null);
-    setMonitorCount(0);
-    lastCurrCaptureIdRef.current = null;
+
+    if (isFreshStart) {
+      setLastSeverity(null);
+      setLastDiffScore(null);
+      setLastMessage("監視を開始しました。次の画像を確認しています。");
+      setPrevImageUrl(null);
+      setCurrImageUrl(null);
+      setPrevImageNo(null);
+      setCurrImageNo(null);
+      setMonitorCount(0);
+      lastCurrCaptureIdRef.current = null;
+    } else {
+      setLastMessage("監視を再開しました。");
+    }
   }
 
-  function handleStopMonitoring() {
+  function openStopModal() {
+    setStopChoice("pause");
+    setStopModalOpen(true);
+  }
+
+  async function handleConfirmStop() {
+    const plan = planStopAction(stopChoice);
+    const startedAt = monitoringStartedAt;
+    const stoppedAt = new Date().toISOString();
+
     setMonitoring(false);
-    setLastMessage("監視を停止しました。");
+    setStopModalOpen(false);
+
+    if (plan.shouldArchive && startedAt) {
+      try {
+        await archiveCurrentSession(
+          { tenantId, userId, startedAt, stoppedAt },
+          monitorSessionDeps
+        );
+        setLastMessage("監視を停止し、イベント履歴・画像を履歴ファイルに保存しました。");
+      } catch (err) {
+        setLastMessage(
+          err instanceof Error
+            ? `履歴の保存に失敗しました: ${err.message}`
+            : "履歴の保存に失敗しました。"
+        );
+      }
+    } else if (plan.shouldLockStartButton) {
+      setLastMessage("監視を停止しました。");
+    } else {
+      setLastMessage("監視を一時停止しました。「監視の開始」で再開できます。");
+    }
+
+    if (plan.shouldLockStartButton) {
+      // 再開不可の停止なので、次に「監視の開始」が有効化される場合は
+      // 新規セッションとして扱う。
+      setMonitoringStartedAt(null);
+    }
+    setMonitoringLocked(plan.shouldLockStartButton);
   }
 
   const displayedEvents = useMemo(() => {
@@ -779,25 +952,35 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={monitoring ? handleStopMonitoring : handleStartMonitoring}
-                className={`inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium text-white transition ${
-                  monitoring ? "bg-alert hover:bg-alert/90" : "bg-signal hover:bg-signal/90"
-                }`}
-              >
-                {monitoring ? (
-                  <>
-                    <Square className="h-4 w-4" strokeWidth={1.75} />
-                    停止
-                  </>
-                ) : (
-                  <>
-                    <Play className="h-4 w-4" strokeWidth={1.75} />
-                    監視の開始
-                  </>
-                )}
-              </button>
+              {monitoring ? (
+                <button
+                  type="button"
+                  onClick={openStopModal}
+                  className="inline-flex items-center gap-2 rounded-md bg-alert px-4 py-2 text-sm font-medium text-white transition hover:bg-alert/90"
+                >
+                  <Square className="h-4 w-4" strokeWidth={1.75} />
+                  停止
+                </button>
+              ) : (
+                (() => {
+                  const startButtonState = resolveStartButtonState({
+                    monitoringLocked,
+                    historyViewMode,
+                  });
+                  if (!startButtonState.visible) return null;
+                  return (
+                    <button
+                      type="button"
+                      onClick={handleStartMonitoring}
+                      disabled={startButtonState.disabled}
+                      className="inline-flex items-center gap-2 rounded-md bg-signal px-4 py-2 text-sm font-medium text-white transition hover:bg-signal/90 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Play className="h-4 w-4" strokeWidth={1.75} />
+                      監視の開始
+                    </button>
+                  );
+                })()
+              )}
             </div>
           </div>
 
@@ -1060,6 +1243,71 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
             </ul>
           )}
         </section>
+      )}
+
+      {stopModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="stop-modal-title"
+          onClick={() => setStopModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-lg border border-line bg-white p-5 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="stop-modal-title" className="text-base font-semibold text-ink">
+              停止する種類を選択してください
+            </h2>
+            <div className="mt-4 space-y-3">
+              {(
+                [
+                  ["pause", "一時停止する（再開は可能）"],
+                  [
+                    "save_and_stop",
+                    "イベント履歴・画像を保存して停止する（再開は出来ません）",
+                  ],
+                  [
+                    "stop_only",
+                    "停止のみ（イベント履歴・画像を保存しない。再開は出来ません。）",
+                  ],
+                ] as const
+              ).map(([value, label]) => (
+                <label
+                  key={value}
+                  className="flex cursor-pointer items-start gap-2 text-sm text-ink"
+                >
+                  <input
+                    type="radio"
+                    name="stop-choice"
+                    value={value}
+                    checked={stopChoice === value}
+                    onChange={() => setStopChoice(value)}
+                    className="mt-0.5 accent-signal"
+                  />
+                  <span>{label}</span>
+                </label>
+              ))}
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setStopModalOpen(false)}
+                className="rounded-md border border-line bg-white px-3 py-2 text-sm font-medium text-ink-soft transition hover:border-signal/50"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleConfirmStop()}
+                className="rounded-md bg-alert px-4 py-2 text-sm font-medium text-white transition hover:bg-alert/90"
+              >
+                実行
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {templateModalOpen && (
