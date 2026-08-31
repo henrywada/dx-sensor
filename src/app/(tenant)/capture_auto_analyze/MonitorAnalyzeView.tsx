@@ -1791,7 +1791,6 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
                     imageNo: eventCompareModal.prevNo,
                     url: eventCompareModal.prevUrl,
                   }}
-                  preferPrevFirst
                 />
               )}
             </div>
@@ -1991,12 +1990,10 @@ function CompareImageGrid({
   probeUrl,
   curr,
   prev,
-  preferPrevFirst = false,
 }: {
   probeUrl: string | null;
   curr: ComparePanel;
   prev: ComparePanel;
-  preferPrevFirst?: boolean;
 }) {
   const [isPortrait, setIsPortrait] = useState(false);
 
@@ -2021,7 +2018,7 @@ function CompareImageGrid({
   }, [probeUrl]);
 
   const maxHeightClassName = isPortrait ? "max-h-[55vh]" : "max-h-[70vh]";
-  const panels = preferPrevFirst ? [prev, curr] : [curr, prev];
+  const panels = [curr, prev];
 
   return (
     <div className={`grid gap-4 ${isPortrait ? "grid-cols-2" : "grid-cols-1"}`}>
