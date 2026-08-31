@@ -400,6 +400,14 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <h1 className="text-lg font-semibold text-ink">固定撮影</h1>
+          <button
+            type="button"
+            onClick={() => setHintOpen(true)}
+            className="flex items-center gap-1 text-sm font-medium text-signal transition-colors hover:text-ink"
+          >
+            <HelpCircle className="h-4 w-4" strokeWidth={1.75} />
+            ヒント
+          </button>
           {autoRunning && (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-signal/10 px-2.5 py-0.5 text-xs font-medium text-signal">
               <span className="relative flex h-2 w-2">
@@ -411,14 +419,6 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
           )}
         </div>
         <div className="flex shrink-0 items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setHintOpen(true)}
-            className="flex items-center gap-1 text-sm font-medium text-signal transition-colors hover:text-ink"
-          >
-            <HelpCircle className="h-4 w-4" strokeWidth={1.75} />
-            ヒント
-          </button>
           <button
             type="button"
             onClick={() => {

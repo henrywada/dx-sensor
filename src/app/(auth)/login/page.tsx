@@ -32,7 +32,7 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-paper px-6">
       <div className="w-full max-w-sm">
-        <div className="mb-8 flex flex-col items-center gap-2 text-ink">
+        <div className="mb-8 flex flex-col items-center gap-2 text-[#11521A]">
           <LogoMark className="h-8 w-8 text-signal" />
           <span className="text-xl font-bold tracking-tight">
             dx-sensor
@@ -44,7 +44,7 @@ export default function LoginPage() {
           className="scan-card space-y-4 rounded-lg border border-line bg-white p-6"
         >
           <div>
-            <label htmlFor="email" className="mb-1 block text-sm font-medium text-ink">
+            <label htmlFor="email" className="mb-1 block text-sm font-medium text-[#11521A]">
               メールアドレス
             </label>
             <input
@@ -53,13 +53,13 @@ export default function LoginPage() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-md border border-line px-3 py-2 text-sm text-ink outline-none focus:border-signal focus:ring-1 focus:ring-signal"
+              className="w-full rounded-md border border-line px-3 py-2 text-sm text-[#11521A] outline-none focus:border-signal focus:ring-1 focus:ring-signal"
               placeholder="you@example.com"
             />
           </div>
 
           <div>
-            <label htmlFor="password" className="mb-1 block text-sm font-medium text-ink">
+            <label htmlFor="password" className="mb-1 block text-sm font-medium text-[#11521A]">
               パスワード
             </label>
             <input
@@ -68,7 +68,7 @@ export default function LoginPage() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-md border border-line px-3 py-2 text-sm text-ink outline-none focus:border-signal focus:ring-1 focus:ring-signal"
+              className="w-full rounded-md border border-line px-3 py-2 text-sm text-[#11521A] outline-none focus:border-signal focus:ring-1 focus:ring-signal"
               placeholder="••••••••"
             />
           </div>

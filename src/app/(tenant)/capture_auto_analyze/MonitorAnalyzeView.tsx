@@ -153,7 +153,7 @@ function isChangeEvent(severity: MonitorSeverity | "waiting"): boolean {
 export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps) {
   const supabase = useMemo(() => createClient(), []);
 
-  const [activeTab, setActiveTab] = useState<TabId>("settings");
+  const [activeTab, setActiveTab] = useState<TabId>("zones");
   const [templates, setTemplates] = useState<SystemMonitorTemplate[]>([]);
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [title, setTitle] = useState("");

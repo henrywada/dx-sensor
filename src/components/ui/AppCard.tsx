@@ -16,8 +16,8 @@ export function AppCard({ icon: Icon, eyebrow, title, description, href, badge }
 
   const content = (
     <div
-      className={`scan-card flex h-full flex-col rounded-lg border border-line bg-white p-5 transition-colors ${
-        disabled ? "opacity-60" : "hover:border-signal/50"
+      className={`scan-card flex h-full flex-col rounded-lg border border-line bg-white p-5 shadow-md transition-all ${
+        disabled ? "opacity-60" : "hover:border-signal/50 hover:shadow-lg"
       }`}
     >
       <div className="flex items-start justify-between">
@@ -37,7 +37,7 @@ export function AppCard({ icon: Icon, eyebrow, title, description, href, badge }
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-signal-soft text-signal">
           <Icon className="h-4.5 w-4.5" strokeWidth={1.75} />
         </span>
-        <h3 className="min-w-0 flex-1 text-base font-bold text-ink">{title}</h3>
+        <h3 className="min-w-0 flex-1 text-base font-bold text-[#11521A]">{title}</h3>
         {!disabled && (
           <span className="ml-auto flex shrink-0 items-center gap-1 text-sm font-medium text-signal">
             進む
@@ -46,7 +46,7 @@ export function AppCard({ icon: Icon, eyebrow, title, description, href, badge }
         )}
       </div>
 
-      <p className="mt-2 text-sm leading-relaxed text-ink-soft">{description}</p>
+      <p className="mt-2 text-sm leading-relaxed text-[#275317]">{description}</p>
     </div>
   );
 
