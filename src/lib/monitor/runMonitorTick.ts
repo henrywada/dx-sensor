@@ -80,6 +80,27 @@ function buildAnalysisToolLabel(model?: string): string {
   return `${DIFF_TOOL_LABEL} → Gemini Vision API (${model ?? "gemini"})`;
 }
 
+/**
+ * Geminiの構造化出力（buildMonitorPromptのMONITOR_RESPONSE_SCHEMA）をパースする。
+ * 期待した形式でなければnullを返し、呼び出し側はdiffScoreベースの判定に
+ * フォールバックする（Gemini解析まで進んだ以上、変化の説明自体は失わない）。
+ */
+function parseGeminiSeverityResult(
+  text: string
+): { severity: MonitorSeverity; summary: string } | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object") return null;
+  const { severity, summary } = parsed as Record<string, unknown>;
+  if (severity !== "notify" && severity !== "minor") return null;
+  if (typeof summary !== "string" || summary.trim() === "") return null;
+  return { severity, summary };
+}
+
 export type RunMonitorTickDeps = {
   getNextUnprocessedCapture: (excludeId: string | null) => Promise<MonitorCapture | null>;
   getCaptureById: (id: string) => Promise<MonitorCapture | null>;
@@ -219,13 +240,21 @@ export async function runMonitorTick(
     imageBuffer: currForAnalysis,
     mimeType: currMimeTypeForAnalysis,
   });
+  // Gemini解析まで進んだ場合、最終的なseverity（ラベル）はdiffScoreではなく
+  // Geminiの判定結果を優先する。diffScoreは「Geminiまで解析するか(skip判定)」
+  // のゲートとしてのみ使い、通知要否の最終判断はAIの画像理解に委ねる
+  // （ピクセル差分が小さくても意味のある変化はGeminiが検知できるため）。
+  // 構造化出力が壊れている場合のみdiffScoreベースの判定にフォールバックする。
+  const geminiResult = parseGeminiSeverityResult(analysis.text);
+  const finalSeverity = geminiResult?.severity ?? severity;
+  const finalSummary = geminiResult?.summary ?? analysis.text;
   const eventId = await deps.insertChangeEvent({
     prevCaptureId: prevCapture.id,
     currCaptureId: currCapture.id,
     diffScore,
-    severity,
-    summary: analysis.text,
-    emailQueued: severity === "notify" && Boolean(request.email?.trim()),
+    severity: finalSeverity,
+    summary: finalSummary,
+    emailQueued: finalSeverity === "notify" && Boolean(request.email?.trim()),
     analysisTool: buildAnalysisToolLabel(analysis.model),
   });
 
@@ -242,7 +271,7 @@ export async function runMonitorTick(
   // 比較表示（今回写真↔前回写真）で参照し続けるため、ここでは削除しない。
   return {
     status: "processed",
-    severity,
+    severity: finalSeverity,
     diffScore,
     prevCaptureId: prevCapture.id,
     currCaptureId: currCapture.id,
@@ -250,7 +279,7 @@ export async function runMonitorTick(
     currCaptureNo,
     prevSignedUrl,
     currSignedUrl,
-    summary: analysis.text,
+    summary: finalSummary,
     eventId,
   };
 }

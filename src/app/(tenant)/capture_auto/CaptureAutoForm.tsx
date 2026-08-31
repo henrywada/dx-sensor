@@ -61,11 +61,19 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
   const clearOwnAutoCaptures = useCallback(async () => {
     setClearWarning(null);
     try {
+      // processed_at is null の行だけをクリア対象にする。
+      // 一度でも監視tick(runMonitorTick)で処理された画像はmarkCaptureProcessedで
+      // 必ずprocessed_atが埋まり、そのタイミング以外でmonitor_change_eventsから
+      // 参照されることはない。processed_at is nullで絞らずに全件削除すると、
+      // 「履歴ファイル」（monitor_sessionsでアーカイブされたイベント履歴）が
+      // 参照しているauto_captures行まで消えてしまい、ログは残るのに比較画像だけ
+      // 失われる（monitor_change_events.*_capture_idはon delete set null）。
       const { data: rows, error: selectError } = await supabase
         .from("auto_captures")
         .select("id, storage_path")
         .eq("tenant_id", tenantId)
-        .eq("captured_by", userId);
+        .eq("captured_by", userId)
+        .is("processed_at", null);
 
       if (selectError) throw selectError;
       if (!rows || rows.length === 0) return;
@@ -85,7 +93,8 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
         .from("auto_captures")
         .delete()
         .eq("tenant_id", tenantId)
-        .eq("captured_by", userId);
+        .eq("captured_by", userId)
+        .is("processed_at", null);
 
       if (deleteError) throw deleteError;
     } catch (err) {

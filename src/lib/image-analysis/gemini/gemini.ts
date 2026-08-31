@@ -7,7 +7,13 @@ type GeminiAnalyzeInput = VisionAnalyzeInput & {
 
 export async function analyzeWithGemini(
   input: GeminiAnalyzeInput,
-  options: { apiKey: string; model?: string; fetchImpl?: FetchImpl }
+  options: {
+    apiKey: string;
+    model?: string;
+    fetchImpl?: FetchImpl;
+    /** 指定時は generationConfig.responseSchema としてJSON構造化出力を強制する。 */
+    responseSchema?: object;
+  }
 ): Promise<VisionAnalyzeResult> {
   const fetchImpl = options.fetchImpl ?? fetch;
   const model = options.model ?? "gemini-2.5-flash";
@@ -42,6 +48,14 @@ export async function analyzeWithGemini(
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       contents: [{ parts }],
+      ...(options.responseSchema
+        ? {
+            generationConfig: {
+              responseMimeType: "application/json",
+              responseSchema: options.responseSchema,
+            },
+          }
+        : {}),
     }),
   });
 

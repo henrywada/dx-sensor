@@ -160,7 +160,7 @@ describe("runMonitorTick", () => {
       })),
       diffScore: vi.fn(async () => 0.05),
       analyzeImages: vi.fn(async () => ({
-        text: "軽微な変化があります",
+        text: JSON.stringify({ severity: "minor", summary: "軽微な変化があります" }),
         raw: {},
         model: "gemini-2.5-flash",
       })),
@@ -171,12 +171,14 @@ describe("runMonitorTick", () => {
     expect(result).toMatchObject({
       status: "processed",
       severity: "minor",
+      summary: "軽微な変化があります",
       eventId: "event-id",
       prevSignedUrl: "signed:tenant/day/prev.jpg",
     });
     expect(deps.insertChangeEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         severity: "minor",
+        summary: "軽微な変化があります",
         analysisTool: "sharp+SSIM+pixelmatch → Gemini Vision API (gemini-2.5-flash)",
       })
     );
@@ -198,7 +200,7 @@ describe("runMonitorTick", () => {
       })),
       diffScore: vi.fn(async () => 0.08),
       analyzeImages: vi.fn(async () => ({
-        text: "大きな変化があります",
+        text: JSON.stringify({ severity: "notify", summary: "大きな変化があります" }),
         raw: {
           usageMetadata: {
             promptTokenCount: 100,
@@ -241,6 +243,70 @@ describe("runMonitorTick", () => {
     );
     expect(deps.markCaptureProcessed).toHaveBeenCalledWith("curr-capture");
     expect(deps.deleteCaptureIfUnreferenced).not.toHaveBeenCalled();
+  });
+
+  it("uses Gemini's severity judgment even when it disagrees with the pixel diff score (bug: count changes labeled minor)", async () => {
+    // 再現ケース: diffScore=0.0354はDIFF_NOTIFY_AT(0.08)未満なのでpixel差分だけなら
+    // "minor"になるが、Geminiが「貝殻の数が2個から1個に変化」のような意味のある
+    // 変化を検出しnotifyと判定した場合は、そちらを最終ラベルとして採用すべき。
+    const deps = createDeps({
+      getNextUnprocessedCapture: vi.fn(async () => ({
+        id: "curr-capture",
+        storagePath: "tenant/day/curr.jpg",
+      })),
+      getCaptureById: vi.fn(async () => ({
+        id: "prev-capture",
+        storagePath: "tenant/day/prev.jpg",
+      })),
+      diffScore: vi.fn(async () => 0.0354),
+      analyzeImages: vi.fn(async () => ({
+        text: JSON.stringify({
+          severity: "notify",
+          summary: "貝殻の数が2個から1個に変化しました。",
+        }),
+        raw: {},
+        model: "gemini-2.5-flash",
+      })),
+    });
+
+    const result = await runMonitorTick(
+      { ...REQUEST, email: "notify@example.com" },
+      deps
+    );
+
+    expect(result).toMatchObject({
+      severity: "notify",
+      summary: "貝殻の数が2個から1個に変化しました。",
+    });
+    expect(deps.insertChangeEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ severity: "notify", emailQueued: true })
+    );
+  });
+
+  it("falls back to the pixel diff severity when Gemini's response is not valid structured JSON", async () => {
+    const deps = createDeps({
+      getNextUnprocessedCapture: vi.fn(async () => ({
+        id: "curr-capture",
+        storagePath: "tenant/day/curr.jpg",
+      })),
+      getCaptureById: vi.fn(async () => ({
+        id: "prev-capture",
+        storagePath: "tenant/day/prev.jpg",
+      })),
+      diffScore: vi.fn(async () => 0.05),
+      analyzeImages: vi.fn(async () => ({
+        text: "自由文の応答（JSONではない）",
+        raw: {},
+        model: "gemini-2.5-flash",
+      })),
+    });
+
+    const result = await runMonitorTick(REQUEST, deps);
+
+    expect(result).toMatchObject({
+      severity: "minor",
+      summary: "自由文の応答（JSONではない）",
+    });
   });
 
   it("監視ゾーンが設定されていれば、切り出した画像でdiffScoreとanalyzeImagesを呼ぶ", async () => {

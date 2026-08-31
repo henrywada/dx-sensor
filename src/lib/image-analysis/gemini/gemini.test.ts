@@ -76,4 +76,44 @@ describe("analyzeWithGemini", () => {
       },
     });
   });
+
+  it("includes generationConfig.responseSchema when responseSchema option is set", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        candidates: [
+          { content: { parts: [{ text: '{"severity":"notify","summary":"x"}' }] } },
+        ],
+      }),
+    });
+    const schema = { type: "OBJECT", properties: { severity: { type: "STRING" } } };
+
+    await analyzeWithGemini(
+      { imageBuffer: Buffer.from("hello"), mimeType: "image/jpeg", prompt: "test" },
+      { apiKey: "gemini-test", fetchImpl: fetchMock, responseSchema: schema }
+    );
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    expect(body.generationConfig).toEqual({
+      responseMimeType: "application/json",
+      responseSchema: schema,
+    });
+  });
+
+  it("omits generationConfig when responseSchema option is not set", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        candidates: [{ content: { parts: [{ text: "plain text" }] } }],
+      }),
+    });
+
+    await analyzeWithGemini(
+      { imageBuffer: Buffer.from("hello"), mimeType: "image/jpeg", prompt: "test" },
+      { apiKey: "gemini-test", fetchImpl: fetchMock }
+    );
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    expect(body.generationConfig).toBeUndefined();
+  });
 });

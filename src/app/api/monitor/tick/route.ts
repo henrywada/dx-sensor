@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getActiveTenant } from "@/lib/auth/getActiveTenant";
 import { getViewerContext } from "@/lib/auth/getViewerContext";
 import { analyzeWithGemini } from "@/lib/image-analysis/gemini/gemini";
+import { MONITOR_RESPONSE_SCHEMA } from "@/lib/monitor/buildMonitorPrompt";
 import {
   type DownloadedCapture,
   type InsertMonitorChangeEventInput,
@@ -199,6 +200,7 @@ export async function POST(req: Request) {
       return analyzeWithGemini(input, {
         apiKey,
         model: process.env.GEMINI_VISION_MODEL || "gemini-2.5-flash",
+        responseSchema: MONITOR_RESPONSE_SCHEMA,
       });
     },
 

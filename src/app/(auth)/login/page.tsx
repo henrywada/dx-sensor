@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Mail, Lock } from "lucide-react";
 import { LogoMark } from "@/components/ui/LogoMark";
 import { createClient } from "@/lib/supabase/client";
 
@@ -44,7 +45,8 @@ export default function LoginPage() {
           className="scan-card space-y-4 rounded-lg border border-line bg-white p-6"
         >
           <div>
-            <label htmlFor="email" className="mb-1 block text-sm font-medium text-[#11521A]">
+            <label htmlFor="email" className="mb-1 flex items-center gap-1.5 text-sm font-medium text-[#11521A]">
+              <Mail className="h-4 w-4" aria-hidden="true" />
               メールアドレス
             </label>
             <input
@@ -59,7 +61,8 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label htmlFor="password" className="mb-1 block text-sm font-medium text-[#11521A]">
+            <label htmlFor="password" className="mb-1 flex items-center gap-1.5 text-sm font-medium text-[#11521A]">
+              <Lock className="h-4 w-4" aria-hidden="true" />
               パスワード
             </label>
             <input
