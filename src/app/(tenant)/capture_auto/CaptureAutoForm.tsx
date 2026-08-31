@@ -61,26 +61,23 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
   const clearOwnAutoCaptures = useCallback(async () => {
     setClearWarning(null);
     try {
-      // processed_at is null の行だけをクリア対象にする。
-      // 一度でも監視tick(runMonitorTick)で処理された画像はmarkCaptureProcessedで
-      // 必ずprocessed_atが埋まり、そのタイミング以外でmonitor_change_eventsから
-      // 参照されることはない。processed_at is nullで絞らずに全件削除すると、
-      // 「履歴ファイル」（monitor_sessionsでアーカイブされたイベント履歴）が
-      // 参照しているauto_captures行まで消えてしまい、ログは残るのに比較画像だけ
-      // 失われる（monitor_change_events.*_capture_idはon delete set null）。
-      const { data: rows, error: selectError } = await supabase
-        .from("auto_captures")
-        .select("id, storage_path")
-        .eq("tenant_id", tenantId)
-        .eq("captured_by", userId)
-        .is("processed_at", null);
+      // 「前のイベント履歴」（session_id is null の、まだ履歴ファイルとして
+      // 保存されていない現在のmonitor_change_events）と「画像」(auto_captures)
+      // をまとめてクリアする。DB関数側でイベント削除→画像削除の順に単一トランザクションで
+      // 実行し、「履歴ファイル」（session_id付きのアーカイブ済み履歴）が参照している
+      // 画像だけは保護する（clear_own_auto_captures_and_events、
+      // 20260831120000マイグレーション参照）。RLS(auto_captures_delete_own /
+      // monitor_change_events_delete_own)はこの関数内でもそのまま効く。
+      const { data: deletedRows, error: rpcError } = await supabase.rpc(
+        "clear_own_auto_captures_and_events",
+        { p_tenant_id: tenantId, p_user_id: userId }
+      );
 
-      if (selectError) throw selectError;
-      if (!rows || rows.length === 0) return;
+      if (rpcError) throw rpcError;
 
-      const paths = rows
-        .map((r) => r.storage_path as string)
-        .filter((p) => Boolean(p));
+      const paths = ((deletedRows ?? []) as { storage_path: string | null }[])
+        .map((row) => row.storage_path)
+        .filter((p): p is string => Boolean(p));
 
       if (paths.length > 0) {
         const { error: storageError } = await supabase.storage
@@ -88,15 +85,6 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
           .remove(paths);
         if (storageError) throw storageError;
       }
-
-      const { error: deleteError } = await supabase
-        .from("auto_captures")
-        .delete()
-        .eq("tenant_id", tenantId)
-        .eq("captured_by", userId)
-        .is("processed_at", null);
-
-      if (deleteError) throw deleteError;
     } catch (err) {
       console.error("clearOwnAutoCaptures failed", err);
       setClearWarning(
