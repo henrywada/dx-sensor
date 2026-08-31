@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Bell, CircleHelp, FileText, History, ImageIcon, Images, ListChecks, Play, Settings, Square, Trash2, Wand2 } from "lucide-react";
+import { Bell, CircleHelp, FileText, History, ImageIcon, Images, ListChecks, Loader2, Play, Settings, Square, Trash2, Wand2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
@@ -191,6 +191,9 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
   const [historyListModalOpen, setHistoryListModalOpen] = useState(false);
   const [savedSessions, setSavedSessions] = useState<SavedSession[]>([]);
   const [historyFilesLoading, setHistoryFilesLoading] = useState(false);
+  // 復元(Storageコピー+RPC)は処理時間がかかることがあるため、
+  // どのセッションを処理中か保持してスピナー表示・他行の操作抑止に使う。
+  const [restoringSessionId, setRestoringSessionId] = useState<string | null>(null);
   const [historyFilesError, setHistoryFilesError] = useState<string | null>(null);
 
   const [processedFilter, setProcessedFilter] = useState<ProcessedFilter>(PROCESSED_ALL);
@@ -898,6 +901,7 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
 
   async function handleSelectHistorySession(session: MonitorSession) {
     setHistoryFilesError(null);
+    setRestoringSessionId(session.id);
     try {
       await restoreSessionToCurrent(session.id, tenantId, userId, monitorSessionDeps);
       setHistoryListModalOpen(false);
@@ -908,6 +912,8 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
       setHistoryFilesError(
         err instanceof Error ? err.message : "履歴フォルダーの復元に失敗しました"
       );
+    } finally {
+      setRestoringSessionId(null);
     }
   }
 
@@ -1563,34 +1569,46 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
               {savedSessions.length === 0 && (
                 <p className="py-4 text-sm text-ink-soft">保存された履歴フォルダーはありません。</p>
               )}
-              {savedSessions.map((session) => (
-                <div
-                  key={session.id}
-                  className="flex items-center gap-1 border-b border-line/70 last:border-b-0"
-                >
-                  <button
-                    type="button"
-                    onClick={() => void handleSelectHistorySession(session)}
-                    className="flex-1 py-3 text-left hover:bg-paper/80"
+              {savedSessions.map((session) => {
+                const isRestoringThis = restoringSessionId === session.id;
+                const isBusy = restoringSessionId !== null;
+                return (
+                  <div
+                    key={session.id}
+                    className="flex items-center gap-1 border-b border-line/70 last:border-b-0"
                   >
-                    <p className="text-sm font-medium text-ink">
-                      {formatSessionRangeLabel(session)}
-                    </p>
-                    <p className="text-xs text-ink-soft">
-                      ログ{session.logCount}件 ・ 画像{session.imageCount}枚
-                    </p>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleDeleteHistorySession(session)}
-                    className="shrink-0 rounded p-1.5 text-ink-soft transition hover:bg-alert/10 hover:text-alert"
-                    aria-label={`「${formatSessionRangeLabel(session)}」を削除`}
-                    title="削除"
-                  >
-                    <Trash2 className="h-4 w-4" strokeWidth={1.75} />
-                  </button>
-                </div>
-              ))}
+                    <button
+                      type="button"
+                      onClick={() => void handleSelectHistorySession(session)}
+                      disabled={isBusy}
+                      className="flex-1 py-3 text-left hover:bg-paper/80 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <p className="flex items-center gap-2 text-sm font-medium text-ink">
+                        {formatSessionRangeLabel(session)}
+                        {isRestoringThis && (
+                          <span className="inline-flex items-center gap-1 text-xs font-normal text-signal">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} />
+                            処理中...
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-xs text-ink-soft">
+                        ログ{session.logCount}件 ・ 画像{session.imageCount}枚
+                      </p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleDeleteHistorySession(session)}
+                      disabled={isBusy}
+                      className="shrink-0 rounded p-1.5 text-ink-soft transition hover:bg-alert/10 hover:text-alert disabled:cursor-not-allowed disabled:opacity-40"
+                      aria-label={`「${formatSessionRangeLabel(session)}」を削除`}
+                      title="削除"
+                    >
+                      <Trash2 className="h-4 w-4" strokeWidth={1.75} />
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
