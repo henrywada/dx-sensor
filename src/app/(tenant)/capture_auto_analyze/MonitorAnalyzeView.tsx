@@ -188,6 +188,9 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
   const [stopChoice, setStopChoice] = useState<StopChoice>("pause");
   const [monitoringLocked, setMonitoringLocked] = useState(false);
   const [historyViewMode, setHistoryViewMode] = useState(false);
+  // 「履歴フォルダーを見る」で復元中の履歴フォルダーの日時情報。
+  // historyViewMode中、アクティブ履歴・画像表示タブの上部に表示する案内バナーに使う。
+  const [restoredSession, setRestoredSession] = useState<MonitorSession | null>(null);
   const [historyListModalOpen, setHistoryListModalOpen] = useState(false);
   const [savedSessions, setSavedSessions] = useState<SavedSession[]>([]);
   const [historyFilesLoading, setHistoryFilesLoading] = useState(false);
@@ -906,6 +909,7 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
       await restoreSessionToCurrent(session.id, tenantId, userId, monitorSessionDeps);
       setHistoryListModalOpen(false);
       setHistoryViewMode(true);
+      setRestoredSession(session);
       void loadEvents();
       void loadImages();
     } catch (err) {
@@ -1265,6 +1269,9 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
 
       {activeTab === "history" && (
         <section className="mt-5 rounded-lg border border-line bg-white p-5">
+          {historyViewMode && restoredSession && (
+            <HistoryViewBanner session={restoredSession} />
+          )}
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -1386,6 +1393,9 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
 
       {activeTab === "images" && (
         <section className="mt-5 rounded-lg border border-line bg-white p-5">
+          {historyViewMode && restoredSession && (
+            <HistoryViewBanner session={restoredSession} />
+          )}
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -1965,6 +1975,18 @@ function NaturalAspectImage({
         alt={alt}
         className={`mx-auto h-auto w-full object-contain ${maxHeightClassName}`}
       />
+    </div>
+  );
+}
+
+/** 「履歴フォルダー」から復元して閲覧中であることを知らせる案内バナー。 */
+function HistoryViewBanner({ session }: { session: MonitorSession }) {
+  return (
+    <div className="mb-4 flex items-center gap-2 rounded-md border border-alert/40 bg-alert/10 px-3 py-2 text-sm text-alert">
+      <History className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+      <span>
+        過去の履歴ログデータを表示しています：{formatSessionRangeLabel(session)}
+      </span>
     </div>
   );
 }
