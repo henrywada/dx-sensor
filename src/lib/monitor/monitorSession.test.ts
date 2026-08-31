@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   archiveCurrentSession,
+  buildArchiveStoragePath,
+  buildRestoreStoragePath,
   clearCurrentEvents,
   deleteSavedSession,
   formatSessionRangeLabel,
@@ -11,14 +13,17 @@ import {
 
 function createDeps(overrides: Partial<MonitorSessionDeps> = {}): MonitorSessionDeps {
   return {
-    createSession: vi.fn(async () => ({ id: "session-1" })),
-    tagCurrentEventsToSession: vi.fn(async () => undefined),
+    generateId: vi.fn(() => "generated-id"),
+    listActiveCaptures: vi.fn(async () => []),
+    copyStorageObjects: vi.fn(async () => undefined),
+    archiveSession: vi.fn(async () => undefined),
     listSavedSessions: vi.fn(async () => []),
-    fetchSessionEvents: vi.fn(async () => []),
-    insertCurrentEvents: vi.fn(async () => undefined),
+    listSessionCaptures: vi.fn(async () => []),
+    restoreSession: vi.fn(async () => undefined),
     deleteCurrentEvents: vi.fn(async () => []),
     deleteCaptureIfUnreferenced: vi.fn(async () => false),
     deleteSession: vi.fn(async () => undefined),
+    removeStorageObjects: vi.fn(async () => undefined),
     ...overrides,
   };
 }
@@ -31,14 +36,14 @@ describe("planStopAction", () => {
     });
   });
 
-  it("保存して停止ではアーカイブし開始ボタンをロックする", () => {
+  it("保存して終了ではアーカイブし開始ボタンをロックする", () => {
     expect(planStopAction("save_and_stop")).toEqual({
       shouldArchive: true,
       shouldLockStartButton: true,
     });
   });
 
-  it("停止のみではアーカイブせず開始ボタンをロックする", () => {
+  it("終了のみではアーカイブせず開始ボタンをロックする", () => {
     expect(planStopAction("stop_only")).toEqual({
       shouldArchive: false,
       shouldLockStartButton: true,
@@ -58,10 +63,46 @@ describe("formatSessionRangeLabel", () => {
   });
 });
 
+describe("buildArchiveStoragePath", () => {
+  it("tenantId/archive/sessionId/captureId+拡張子 の形式を返す", () => {
+    const path = buildArchiveStoragePath("tenant-1", "session-42", {
+      captureId: "cap-1",
+      storagePath: "tenant-1/2026-08-31/cap-1.jpg",
+      createdAt: "2026-08-31T00:00:00.000Z",
+    });
+    expect(path).toBe("tenant-1/archive/session-42/cap-1.jpg");
+  });
+
+  it("拡張子が無い場合は付けない", () => {
+    const path = buildArchiveStoragePath("tenant-1", "session-42", {
+      captureId: "cap-1",
+      storagePath: "tenant-1/2026-08-31/cap-1",
+      createdAt: "2026-08-31T00:00:00.000Z",
+    });
+    expect(path).toBe("tenant-1/archive/session-42/cap-1");
+  });
+});
+
+describe("buildRestoreStoragePath", () => {
+  it("tenantId/restored/newCaptureId+拡張子 の形式を返す", () => {
+    const path = buildRestoreStoragePath("tenant-1", "new-cap-1", {
+      captureId: "cap-1",
+      storagePath: "tenant-1/archive/session-42/cap-1.png",
+      createdAt: "2026-08-31T00:00:00.000Z",
+    });
+    expect(path).toBe("tenant-1/restored/new-cap-1.png");
+  });
+});
+
 describe("archiveCurrentSession", () => {
-  it("セッションを作成し、その時間帯の現在イベントをタグ付けする", async () => {
+  it("アクティブな画像をアーカイブ先へコピーしてからDBへ保存する", async () => {
+    const captures = [
+      { captureId: "cap-1", storagePath: "tenant-1/day/cap-1.jpg", createdAt: "2026-08-30T08:00:00.000Z" },
+      { captureId: "cap-2", storagePath: "tenant-1/day/cap-2.jpg", createdAt: "2026-08-30T08:05:00.000Z" },
+    ];
     const deps = createDeps({
-      createSession: vi.fn(async () => ({ id: "session-42" })),
+      generateId: vi.fn(() => "session-42"),
+      listActiveCaptures: vi.fn(async () => captures),
     });
 
     const result = await archiveCurrentSession(
@@ -74,19 +115,76 @@ describe("archiveCurrentSession", () => {
       deps
     );
 
-    expect(deps.createSession).toHaveBeenCalledWith({
+    expect(deps.listActiveCaptures).toHaveBeenCalledWith({ tenantId: "tenant-1", userId: "user-1" });
+    expect(deps.copyStorageObjects).toHaveBeenCalledWith([
+      { fromPath: "tenant-1/day/cap-1.jpg", toPath: "tenant-1/archive/session-42/cap-1.jpg" },
+      { fromPath: "tenant-1/day/cap-2.jpg", toPath: "tenant-1/archive/session-42/cap-2.jpg" },
+    ]);
+    expect(deps.archiveSession).toHaveBeenCalledWith({
+      sessionId: "session-42",
       tenantId: "tenant-1",
       userId: "user-1",
       startedAt: "2026-08-30T08:00:00.000Z",
       stoppedAt: "2026-08-30T08:30:00.000Z",
+      captureMap: [
+        { oldCaptureId: "cap-1", newCaptureId: "cap-1", newStoragePath: "tenant-1/archive/session-42/cap-1.jpg" },
+        { oldCaptureId: "cap-2", newCaptureId: "cap-2", newStoragePath: "tenant-1/archive/session-42/cap-2.jpg" },
+      ],
     });
-    expect(deps.tagCurrentEventsToSession).toHaveBeenCalledWith({
-      userId: "user-1",
-      sessionId: "session-42",
+    expect(result).toEqual({
+      id: "session-42",
       startedAt: "2026-08-30T08:00:00.000Z",
       stoppedAt: "2026-08-30T08:30:00.000Z",
     });
-    expect(result.id).toBe("session-42");
+  });
+
+  it("画像が無ければStorageコピーを呼ばない", async () => {
+    const deps = createDeps({ listActiveCaptures: vi.fn(async () => []) });
+
+    await archiveCurrentSession(
+      { tenantId: "tenant-1", userId: "user-1", startedAt: "2026-08-30T08:00:00.000Z", stoppedAt: "2026-08-30T08:30:00.000Z" },
+      deps
+    );
+
+    expect(deps.copyStorageObjects).not.toHaveBeenCalled();
+    expect(deps.archiveSession).toHaveBeenCalled();
+  });
+});
+
+describe("restoreSessionToCurrent", () => {
+  it("履歴フォルダーの画像を新IDでコピーし、複製イベントとして現在に戻す", async () => {
+    const captures = [
+      { captureId: "cap-1", storagePath: "tenant-1/archive/session-1/cap-1.jpg", createdAt: "2026-08-30T08:00:00.000Z" },
+    ];
+    const generateId = vi.fn().mockReturnValueOnce("new-cap-1");
+    const deps = createDeps({
+      generateId,
+      listSessionCaptures: vi.fn(async () => captures),
+    });
+
+    await restoreSessionToCurrent("session-1", "tenant-1", "user-1", deps);
+
+    expect(deps.listSessionCaptures).toHaveBeenCalledWith("session-1");
+    expect(deps.copyStorageObjects).toHaveBeenCalledWith([
+      { fromPath: "tenant-1/archive/session-1/cap-1.jpg", toPath: "tenant-1/restored/new-cap-1.jpg" },
+    ]);
+    expect(deps.restoreSession).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      tenantId: "tenant-1",
+      userId: "user-1",
+      captureMap: [
+        { oldCaptureId: "cap-1", newCaptureId: "new-cap-1", newStoragePath: "tenant-1/restored/new-cap-1.jpg" },
+      ],
+    });
+  });
+
+  it("画像が無ければ何もしない", async () => {
+    const deps = createDeps({ listSessionCaptures: vi.fn(async () => []) });
+
+    await restoreSessionToCurrent("session-1", "tenant-1", "user-1", deps);
+
+    expect(deps.copyStorageObjects).not.toHaveBeenCalled();
+    expect(deps.restoreSession).not.toHaveBeenCalled();
   });
 });
 
@@ -118,88 +216,30 @@ describe("clearCurrentEvents", () => {
   });
 });
 
-describe("restoreSessionToCurrent", () => {
-  it("アーカイブ済みイベントを現在イベントとして複製する", async () => {
-    const rows = [
-      {
-        prevCaptureId: "cap-1",
-        currCaptureId: "cap-2",
-        diffScore: 0.1,
-        severity: "notify" as const,
-        aiSummary: "変化を検知",
-        emailQueued: true,
-        analysisTool: "sharp+SSIM+pixelmatch",
-        createdAt: "2026-08-30T08:10:00.000Z",
-      },
-    ];
-    const deps = createDeps({ fetchSessionEvents: vi.fn(async () => rows) });
-
-    await restoreSessionToCurrent("session-1", "tenant-1", "user-1", deps);
-
-    expect(deps.fetchSessionEvents).toHaveBeenCalledWith("session-1");
-    expect(deps.insertCurrentEvents).toHaveBeenCalledWith({
-      tenantId: "tenant-1",
-      userId: "user-1",
-      rows,
-    });
-  });
-
-  it("イベントが無ければ挿入しない", async () => {
-    const deps = createDeps({ fetchSessionEvents: vi.fn(async () => []) });
-
-    await restoreSessionToCurrent("session-1", "tenant-1", "user-1", deps);
-
-    expect(deps.insertCurrentEvents).not.toHaveBeenCalled();
-  });
-});
-
 describe("deleteSavedSession", () => {
-  it("セッションが参照していたキャプチャを重複なく後始末してから削除する", async () => {
-    const deps = createDeps({
-      fetchSessionEvents: vi.fn(async () => [
-        {
-          prevCaptureId: "cap-1",
-          currCaptureId: "cap-2",
-          diffScore: 0.1,
-          severity: "notify" as const,
-          aiSummary: "変化を検知",
-          emailQueued: false,
-          analysisTool: "sharp",
-          createdAt: "2026-08-30T08:10:00.000Z",
-        },
-        {
-          prevCaptureId: "cap-2",
-          currCaptureId: "cap-3",
-          diffScore: 0.2,
-          severity: "minor" as const,
-          aiSummary: "軽微な変化",
-          emailQueued: false,
-          analysisTool: "sharp",
-          createdAt: "2026-08-30T08:15:00.000Z",
-        },
-      ]),
-    });
+  it("履歴フォルダーの画像一覧を取得し、DB削除後にStorageも削除する", async () => {
+    const captures = [
+      { captureId: "cap-1", storagePath: "tenant-1/archive/session-1/cap-1.jpg", createdAt: "2026-08-30T08:00:00.000Z" },
+      { captureId: "cap-2", storagePath: "tenant-1/archive/session-1/cap-2.jpg", createdAt: "2026-08-30T08:05:00.000Z" },
+    ];
+    const deps = createDeps({ listSessionCaptures: vi.fn(async () => captures) });
 
     await deleteSavedSession("session-1", deps);
 
-    expect(deps.fetchSessionEvents).toHaveBeenCalledWith("session-1");
-    // 削除前にキャプチャ参照を取得しておき、削除後にそのIDで後始末する
-    // （session削除はDB側でイベント行をCASCADE削除するため、削除後には
-    // 参照を取得できなくなる）。
+    expect(deps.listSessionCaptures).toHaveBeenCalledWith("session-1");
     expect(deps.deleteSession).toHaveBeenCalledWith("session-1");
-    expect(deps.deleteCaptureIfUnreferenced).toHaveBeenCalledTimes(3);
-    const calledIds = (deps.deleteCaptureIfUnreferenced as ReturnType<typeof vi.fn>).mock.calls
-      .map((call: any[]) => call[0] as string)
-      .sort();
-    expect(calledIds).toEqual(["cap-1", "cap-2", "cap-3"]);
+    expect(deps.removeStorageObjects).toHaveBeenCalledWith([
+      "tenant-1/archive/session-1/cap-1.jpg",
+      "tenant-1/archive/session-1/cap-2.jpg",
+    ]);
   });
 
-  it("イベントが無くてもセッション自体は削除する", async () => {
-    const deps = createDeps({ fetchSessionEvents: vi.fn(async () => []) });
+  it("画像が無くてもセッション自体は削除する", async () => {
+    const deps = createDeps({ listSessionCaptures: vi.fn(async () => []) });
 
     await deleteSavedSession("session-1", deps);
 
     expect(deps.deleteSession).toHaveBeenCalledWith("session-1");
-    expect(deps.deleteCaptureIfUnreferenced).not.toHaveBeenCalled();
+    expect(deps.removeStorageObjects).not.toHaveBeenCalled();
   });
 });

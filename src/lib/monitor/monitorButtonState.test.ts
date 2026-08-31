@@ -28,8 +28,23 @@ describe("resolveStartButtonState", () => {
 });
 
 describe("resolveHistoryFilesButtonVisible", () => {
-  it("監視停止中のみ表示する", () => {
-    expect(resolveHistoryFilesButtonVisible(false)).toBe(true);
-    expect(resolveHistoryFilesButtonVisible(true)).toBe(false);
+  it("監視停止中かつ一時停止中でなければ表示する", () => {
+    expect(
+      resolveHistoryFilesButtonVisible({ monitoring: false, isPaused: false })
+    ).toBe(true);
+  });
+
+  it("監視中は非表示", () => {
+    expect(
+      resolveHistoryFilesButtonVisible({ monitoring: true, isPaused: false })
+    ).toBe(false);
+  });
+
+  it("一時停止中（再開可能な状態）は非表示にする", () => {
+    // 「履歴フォルダーを見る」を押すとclearCurrentEventsが現在のアクティブ履歴・画像を
+    // 削除してしまうため、再開待ちの一時停止データを不意に失わせないよう隠す。
+    expect(
+      resolveHistoryFilesButtonVisible({ monitoring: false, isPaused: true })
+    ).toBe(false);
   });
 });

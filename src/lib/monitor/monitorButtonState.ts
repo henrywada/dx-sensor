@@ -19,7 +19,14 @@ export function resolveStartButtonState(input: {
   return { visible: true, disabled: input.monitoringLocked };
 }
 
-/** 「履歴ファイルを見る」ボタンは監視が停止している状態でのみ表示する。 */
-export function resolveHistoryFilesButtonVisible(monitoring: boolean): boolean {
-  return !monitoring;
+/**
+ * 「履歴フォルダーを見る」ボタンは、監視が停止していて、かつ一時停止中でない
+ * 場合のみ表示する。一時停止中（再開可能な状態）に表示すると、押した際の
+ * clearCurrentEventsが再開待ちのアクティブ履歴・画像を削除してしまうため。
+ */
+export function resolveHistoryFilesButtonVisible(input: {
+  monitoring: boolean;
+  isPaused: boolean;
+}): boolean {
+  return !input.monitoring && !input.isPaused;
 }

@@ -231,9 +231,9 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
     }
   }, []);
 
-  // /capture_auto と同様、画面を開くたびに自分の古い「現在」イベント履歴を
+  // /capture_auto と同様、画面を開くたびに自分の古い「現在」アクティブ履歴を
   // クリアする（ベストエフォート。失敗しても画面の表示は続行する）。
-  // アーカイブ済み（session_id が付いた）履歴ファイルはここでは消さない。
+  // アーカイブ済み（session_id が付いた）履歴フォルダーはここでは消さない。
   const clearOwnMonitorEvents = useCallback(async () => {
     try {
       const { error } = await supabase
@@ -380,32 +380,43 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
 
   const monitorSessionDeps = useMemo<MonitorSessionDeps>(
     () => ({
-      async createSession({ tenantId, userId: ownerId, startedAt, stoppedAt }) {
+      generateId: () => crypto.randomUUID(),
+
+      async listActiveCaptures({ tenantId, userId: ownerId }) {
         const { data, error } = await supabase
-          .from("monitor_sessions")
-          .insert({
-            tenant_id: tenantId,
-            user_id: ownerId,
-            started_at: startedAt,
-            stopped_at: stoppedAt,
-          })
-          .select("id")
-          .single();
-        if (error || !data) throw new Error(error?.message ?? "履歴の保存に失敗しました");
-        return { id: data.id };
+          .from("auto_captures")
+          .select("id, storage_path, created_at")
+          .eq("tenant_id", tenantId)
+          .eq("captured_by", ownerId);
+        if (error) throw new Error(error.message);
+        return (data ?? []).map((row) => ({
+          captureId: row.id as string,
+          storagePath: row.storage_path as string,
+          createdAt: row.created_at as string,
+        }));
       },
 
-      // created_at による期間の絞り込みはあえて行わない。
-      // 「session_id is null」の集合がそのまま「現在（未アーカイブ）」のイベントであり、
-      // 期間で更に絞ると、ブラウザ時計とPostgresの now() のずれによって
-      // 境界付近のイベントがアーカイブから取りこぼされる（そしてそのまま
-      // 次回リロードの clearOwnMonitorEvents で気づかれずに消える）。
-      async tagCurrentEventsToSession({ userId: ownerId, sessionId }) {
-        const { error } = await supabase
-          .from("monitor_change_events")
-          .update({ session_id: sessionId })
-          .eq("user_id", ownerId)
-          .is("session_id", null);
+      async copyStorageObjects(mappings) {
+        for (const { fromPath, toPath } of mappings) {
+          const { error } = await supabase.storage
+            .from("auto-captures")
+            .copy(fromPath, toPath);
+          if (error) throw new Error(error.message);
+        }
+      },
+
+      async archiveSession({ sessionId, tenantId, userId: ownerId, startedAt, stoppedAt, captureMap }) {
+        const { error } = await supabase.rpc("archive_current_session", {
+          p_session_id: sessionId,
+          p_tenant_id: tenantId,
+          p_user_id: ownerId,
+          p_started_at: startedAt,
+          p_stopped_at: stoppedAt,
+          p_capture_path_map: captureMap.map((mapping) => ({
+            old_capture_id: mapping.oldCaptureId,
+            new_storage_path: mapping.newStoragePath,
+          })),
+        });
         if (error) throw new Error(error.message);
       },
 
@@ -423,46 +434,37 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
         }));
       },
 
-      async fetchSessionEvents(sessionId) {
+      async listSessionCaptures(sessionId) {
         const { data, error } = await supabase
-          .from("monitor_change_events")
-          .select(
-            "prev_capture_id, curr_capture_id, diff_score, severity, ai_summary, email_queued, analysis_tool, created_at"
-          )
+          .from("monitor_session_captures")
+          .select("id, storage_path, created_at")
           .eq("session_id", sessionId);
         if (error) throw new Error(error.message);
         return (data ?? []).map((row) => ({
-          prevCaptureId: row.prev_capture_id as string,
-          currCaptureId: row.curr_capture_id as string,
-          diffScore: row.diff_score as number,
-          severity: row.severity as "skip" | "minor" | "notify",
-          aiSummary: row.ai_summary as string | null,
-          emailQueued: row.email_queued as boolean,
-          analysisTool: row.analysis_tool as string | null,
+          captureId: row.id as string,
+          storagePath: row.storage_path as string,
           createdAt: row.created_at as string,
         }));
       },
 
-      async insertCurrentEvents({ tenantId, userId: ownerId, rows }) {
-        const { error } = await supabase.from("monitor_change_events").insert(
-          rows.map((row) => ({
-            tenant_id: tenantId,
-            user_id: ownerId,
-            prev_capture_id: row.prevCaptureId,
-            curr_capture_id: row.currCaptureId,
-            diff_score: row.diffScore,
-            severity: row.severity,
-            ai_summary: row.aiSummary,
-            email_queued: row.emailQueued,
-            analysis_tool: row.analysisTool,
-            created_at: row.createdAt,
-            session_id: null,
-          }))
-        );
+      async restoreSession({ sessionId, tenantId, userId: ownerId, captureMap }) {
+        const { error } = await supabase.rpc("restore_session_to_current", {
+          p_session_id: sessionId,
+          p_tenant_id: tenantId,
+          p_user_id: ownerId,
+          p_capture_map: captureMap.map((mapping) => ({
+            old_capture_id: mapping.oldCaptureId,
+            new_capture_id: mapping.newCaptureId,
+            new_storage_path: mapping.newStoragePath,
+          })),
+        });
         if (error) throw new Error(error.message);
       },
 
       async deleteCurrentEvents(ownerId) {
+        // session_id is null の条件は、旧方式（タグ付け）で保存された履歴フォルダー用の
+        // 行がまだ残っている過渡期の安全策。新規イベントは常にsession_id nullで
+        // 作られるため、移行完了後にsession_id列自体を削除すればこの条件も不要になる。
         const { data, error } = await supabase
           .from("monitor_change_events")
           .delete()
@@ -496,11 +498,17 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
           .eq("id", sessionId);
         if (error) throw new Error(error.message);
       },
+
+      async removeStorageObjects(paths) {
+        if (paths.length === 0) return;
+        const { error } = await supabase.storage.from("auto-captures").remove(paths);
+        if (error) throw new Error(error.message);
+      },
     }),
     [supabase]
   );
 
-  // 履歴ファイル一覧では、monitorSessionDeps.listSavedSessions（MonitorSession[]を
+  // 履歴フォルダー一覧では、monitorSessionDeps.listSavedSessions（MonitorSession[]を
   // 返す既存の共通インターフェース）とは別に、表示用のログ件数・画像枚数も
   // まとめて取得する。monitor_change_eventsをsession_idでグルーピングし、
   // ログ件数はイベント行数、画像枚数はprev/curr_capture_idの重複を除いた件数とする。
@@ -524,10 +532,9 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
       const eventRows: EventCountRow[] = [];
       for (let from = 0; ; from += PAGE_SIZE) {
         const { data: page, error: pageError } = await supabase
-          .from("monitor_change_events")
+          .from("monitor_session_events")
           .select("session_id, prev_capture_id, curr_capture_id")
           .eq("user_id", ownerId)
-          .not("session_id", "is", null)
           .range(from, from + PAGE_SIZE - 1);
         if (pageError) throw new Error(pageError.message);
         const rows = (page ?? []) as EventCountRow[];
@@ -826,7 +833,7 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
           { tenantId, userId, startedAt, stoppedAt },
           monitorSessionDeps
         );
-        setLastMessage("監視を停止し、イベント履歴・画像を履歴ファイルに保存しました。");
+        setLastMessage("監視を終了し、アクティブ履歴・画像を履歴フォルダーに保存しました。");
       } catch (err) {
         // 保存に失敗した場合は「一時停止」相当として扱う。開始ボタンをロックせず、
         // monitoringStartedAt も維持することで、監視を再開してもう一度
@@ -840,7 +847,7 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
         return;
       }
     } else if (plan.shouldLockStartButton) {
-      setLastMessage("監視を停止しました。");
+      setLastMessage("監視を終了しました。");
     } else {
       setLastMessage("監視を一時停止しました。「監視の開始」で再開できます。");
     }
@@ -856,7 +863,7 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
   async function handleOpenHistoryFiles() {
     if (
       !window.confirm(
-        "現在のイベント履歴・画像は削除されます。よろしいですか？"
+        "現在のアクティブ履歴・画像は削除されます。よろしいですか？"
       )
     ) {
       return;
@@ -877,7 +884,7 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
       setHistoryListModalOpen(true);
     } catch (err) {
       setHistoryFilesError(
-        err instanceof Error ? err.message : "履歴ファイルの読み込みに失敗しました"
+        err instanceof Error ? err.message : "履歴フォルダーの読み込みに失敗しました"
       );
     } finally {
       // clearCurrentEvents はここまでで既にDB側の削除が反映されている可能性があるため、
@@ -899,7 +906,7 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
       void loadImages();
     } catch (err) {
       setHistoryFilesError(
-        err instanceof Error ? err.message : "履歴ファイルの復元に失敗しました"
+        err instanceof Error ? err.message : "履歴フォルダーの復元に失敗しました"
       );
     }
   }
@@ -907,7 +914,7 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
   async function handleDeleteHistorySession(session: MonitorSession) {
     if (
       !window.confirm(
-        `「${formatSessionRangeLabel(session)}」の履歴ファイルを削除しますか？元に戻せません。`
+        `「${formatSessionRangeLabel(session)}」の履歴フォルダーを削除しますか？元に戻せません。`
       )
     ) {
       return;
@@ -919,7 +926,7 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
       setSavedSessions((prev) => prev.filter((s) => s.id !== session.id));
     } catch (err) {
       setHistoryFilesError(
-        err instanceof Error ? err.message : "履歴ファイルの削除に失敗しました"
+        err instanceof Error ? err.message : "履歴フォルダーの削除に失敗しました"
       );
     }
   }
@@ -1157,7 +1164,7 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
                   className="inline-flex items-center gap-2 rounded-md bg-alert px-4 py-2 text-sm font-medium text-white transition hover:bg-alert/90"
                 >
                   <Square className="h-4 w-4" strokeWidth={1.75} />
-                  停止
+                  停止・終了
                 </button>
               ) : (
                 (() => {
@@ -1257,7 +1264,7 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                 <h2 className="flex items-center gap-2 text-base font-semibold text-ink">
                   <History className="h-4 w-4 text-signal" strokeWidth={1.75} />
-                  イベント履歴
+                  アクティブ履歴
                 </h2>
                 <fieldset className="flex flex-wrap items-center gap-3 text-sm text-ink">
                   <legend className="sr-only">履歴の表示範囲</legend>
@@ -1289,14 +1296,17 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              {resolveHistoryFilesButtonVisible(monitoring) && (
+              {resolveHistoryFilesButtonVisible({
+                monitoring,
+                isPaused: !monitoring && monitoringStartedAt !== null,
+              }) && (
                 <button
                   type="button"
                   onClick={() => void handleOpenHistoryFiles()}
                   disabled={historyFilesLoading}
                   className="rounded-md border border-line bg-white px-3 py-2 text-sm font-medium text-ink transition hover:border-signal/50 disabled:opacity-50"
                 >
-                  履歴ファイルを見る
+                  履歴フォルダーを見る
                 </button>
               )}
               <button
@@ -1481,11 +1491,11 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
                   ["pause", "一時停止する（再開は可能）"],
                   [
                     "save_and_stop",
-                    "イベント履歴・画像を保存して停止する（再開は出来ません）",
+                    "アクティブ履歴・画像を「履歴フォルダー」に保存して「終了」する（再開は出来ません）",
                   ],
                   [
                     "stop_only",
-                    "停止のみ（イベント履歴・画像を保存しない。再開は出来ません。）",
+                    "「終了」のみ（アクティブ履歴・画像を保存しない。再開は出来ません。）",
                   ],
                 ] as const
               ).map(([value, label]) => (
@@ -1539,7 +1549,7 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
           >
             <div className="flex shrink-0 items-start justify-between gap-3 border-b border-line px-5 py-3">
               <h2 id="history-list-modal-title" className="text-base font-semibold text-ink">
-                履歴ファイル
+                履歴フォルダー
               </h2>
               <button
                 type="button"
@@ -1551,7 +1561,7 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto px-5 py-1">
               {savedSessions.length === 0 && (
-                <p className="py-4 text-sm text-ink-soft">保存された履歴ファイルはありません。</p>
+                <p className="py-4 text-sm text-ink-soft">保存された履歴フォルダーはありません。</p>
               )}
               {savedSessions.map((session) => (
                 <div
