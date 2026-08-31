@@ -51,7 +51,7 @@ const categories: Category[] = [
       },
       {
         icon: Images,
-        title: "写真フォルダーを見る",
+        title: "写真レポートホルダー",
         description: "写真レポートを表示・編集します。",
         href: "/send_picture_album",
       },
