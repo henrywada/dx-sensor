@@ -45,6 +45,51 @@ type ProcessedFilter =
   | typeof PROCESSED_DONE;
 type HistoryFilter = typeof HISTORY_ALL | typeof HISTORY_EVENTS_ONLY;
 
+/** 各タブの「ミニ説明」モーダルに表示する、専門用語を避けた平易な説明文。 */
+const TAB_HELP_CONTENT: Record<TabId, { title: string; body: string[] }> = {
+  zones: {
+    title: "監視ゾーンの設定 とは",
+    body: [
+      "カメラの映像の中で「ここだけを見張りたい」という範囲を、四角い枠で指定する画面です。",
+      "例えば広い駐車場の中の1台分のスペースだけをチェックしたいときに、その部分だけを枠で囲んでおくと、そこだけを比べて変化を調べられます。",
+      "枠は1つだけでなく、いくつでも指定できます。複数の場所を同時に見張りたいときは、必要な数だけ枠を追加してください。",
+      "枠を何も指定しなければ、画像全体をそのまま比較の対象にします。",
+    ],
+  },
+  settings: {
+    title: "監視条件の設定 とは",
+    body: [
+      "AIに「何を」「どんな基準で」チェックしてほしいかを、日本語の文章で伝えるための設定画面です。",
+      "「テンプレート」を選べば、よくある使い方（駐車場の空き確認など）がすぐ使える形で入ります。「白紙から作成」を選べば、自分の言葉で条件を一から書けます。",
+      "ここで入力した内容は、そのままAIへの指示文の材料になります。",
+    ],
+  },
+  status: {
+    title: "監視状況 とは",
+    body: [
+      "今、監視がどのように動いているかを確認する画面です。",
+      "「監視の開始」を押すと、5秒おきに新しい画像とその一つ前の画像を見比べ、変化があるかをAIが判定します。",
+      "直近の判定結果（変化なし・軽微な変化・通知対象）と、実際に比較した2枚の画像がここに表示されます。",
+    ],
+  },
+  history: {
+    title: "アクティブ履歴 とは",
+    body: [
+      "これまでの監視処理の記録（ログ）を一覧で確認できる画面です。",
+      "「変化があった」と判定されたものだけに絞って見たり、処理はしたが変化がなかったものまで含めて見たりを切り替えられます。",
+      "「履歴フォルダーを見る」を使うと、過去に保存した監視の記録をまとめて呼び出して見返すこともできます。",
+    ],
+  },
+  images: {
+    title: "画像表示 とは",
+    body: [
+      "自動撮影で保存された画像を、一覧のサムネイルで確認できる画面です。",
+      "「未処理のみ」「処理済のみ」で絞り込むと、AIがまだチェックしていない画像や、すでにチェックが終わった画像だけを見つけやすくなります。",
+      "画像をクリックすると、大きく表示して撮影日時なども確認できます。",
+    ],
+  },
+};
+
 type MonitorAnalyzeViewProps = {
   tenantId: string;
   userId: string;
@@ -150,6 +195,19 @@ function isChangeEvent(severity: MonitorSeverity | "waiting"): boolean {
   return severity === "minor" || severity === "notify";
 }
 
+function MiniHelpButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex shrink-0 items-center gap-1 rounded-md border border-line bg-white px-2.5 py-1 text-xs font-medium text-ink-soft transition hover:border-signal/50 hover:text-ink"
+    >
+      <CircleHelp className="h-3.5 w-3.5" strokeWidth={1.75} />
+      ミニ説明
+    </button>
+  );
+}
+
 export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps) {
   const supabase = useMemo(() => createClient(), []);
 
@@ -165,6 +223,7 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
   const [meaningModalOpen, setMeaningModalOpen] = useState(false);
   const [promptModalOpen, setPromptModalOpen] = useState(false);
+  const [tabHelpModalOpen, setTabHelpModalOpen] = useState<TabId | null>(null);
   const [eventCompareModal, setEventCompareModal] = useState<EventCompareModal | null>(null);
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
   const [settingsError, setSettingsError] = useState<string | null>(null);
@@ -985,10 +1044,13 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
 
       {activeTab === "zones" && (
         <section className="mt-5 rounded-lg border border-line bg-white p-5">
-          <h2 className="flex items-center gap-2 text-base font-semibold text-ink">
-            <ImageIcon className="h-4 w-4 text-signal" strokeWidth={1.75} />
-            監視ゾーンの設定
-          </h2>
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="flex items-center gap-2 text-base font-semibold text-ink">
+              <ImageIcon className="h-4 w-4 text-signal" strokeWidth={1.75} />
+              監視ゾーンの設定
+            </h2>
+            <MiniHelpButton onClick={() => setTabHelpModalOpen("zones")} />
+          </div>
           <div className="mt-4">
             <ZoneEditor tenantId={tenantId} userId={userId} />
           </div>
@@ -999,19 +1061,22 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
         <section className="mt-5 rounded-lg border border-line bg-white p-5">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <h2 className="flex items-center gap-2 text-base font-semibold text-ink">
                   <Settings className="h-4 w-4 text-signal" strokeWidth={1.75} />
                   監視条件の設定
                 </h2>
-                <button
-                  type="button"
-                  onClick={() => setMeaningModalOpen(true)}
-                  className="inline-flex items-center gap-1 rounded-md border border-line bg-white px-2.5 py-1 text-xs font-medium text-ink-soft transition hover:border-signal/50 hover:text-ink"
-                >
-                  <CircleHelp className="h-3.5 w-3.5" strokeWidth={1.75} />
-                  監視条件を設定する意味
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setMeaningModalOpen(true)}
+                    className="inline-flex items-center gap-1 rounded-md border border-line bg-white px-2.5 py-1 text-xs font-medium text-ink-soft transition hover:border-signal/50 hover:text-ink"
+                  >
+                    <CircleHelp className="h-3.5 w-3.5" strokeWidth={1.75} />
+                    監視条件を設定する意味
+                  </button>
+                  <MiniHelpButton onClick={() => setTabHelpModalOpen("settings")} />
+                </div>
               </div>
               <p className="mt-1 text-sm text-ink-soft">
                 システムテンプレートを使うか、白紙から項目名・値を自分で設定できます。
@@ -1132,7 +1197,7 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
             <div className="flex min-w-0 items-start gap-3">
               {monitoring && <MonitoringPulse />}
               <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <h2 className="flex items-center gap-2 text-base font-semibold text-ink">
                     <ListChecks className="h-4 w-4 text-signal" strokeWidth={1.75} />
                     監視状況
@@ -1146,14 +1211,17 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
                       </span>
                     )}
                   </h2>
-                  <button
-                    type="button"
-                    onClick={() => setPromptModalOpen(true)}
-                    className="inline-flex items-center gap-1 rounded-md border border-line bg-white px-2.5 py-1 text-xs font-medium text-ink-soft transition hover:border-signal/50 hover:text-ink"
-                  >
-                    <FileText className="h-3.5 w-3.5" strokeWidth={1.75} />
-                    命令を表示
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPromptModalOpen(true)}
+                      className="inline-flex items-center gap-1 rounded-md border border-line bg-white px-2.5 py-1 text-xs font-medium text-ink-soft transition hover:border-signal/50 hover:text-ink"
+                    >
+                      <FileText className="h-3.5 w-3.5" strokeWidth={1.75} />
+                      命令を表示
+                    </button>
+                    <MiniHelpButton onClick={() => setTabHelpModalOpen("status")} />
+                  </div>
                 </div>
                 <p className="mt-1 text-sm text-ink-soft">
                   {monitoring ? "監視中（5秒間隔）" : "停止中"}
@@ -1274,32 +1342,35 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
           )}
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                <h2 className="flex items-center gap-2 text-base font-semibold text-ink">
-                  <History className="h-4 w-4 text-signal" strokeWidth={1.75} />
-                  アクティブ履歴
-                </h2>
-                <fieldset className="flex flex-wrap items-center gap-3 text-sm text-ink">
-                  <legend className="sr-only">履歴の表示範囲</legend>
-                  {(
-                    [
-                      [HISTORY_ALL, "すべて"],
-                      [HISTORY_EVENTS_ONLY, "イベントのみ"],
-                    ] as const
-                  ).map(([value, label]) => (
-                    <label key={value} className="inline-flex cursor-pointer items-center gap-1.5">
-                      <input
-                        type="radio"
-                        name="history-filter"
-                        value={value}
-                        checked={historyFilter === value}
-                        onChange={() => setHistoryFilter(value)}
-                        className="accent-signal"
-                      />
-                      <span>{label}</span>
-                    </label>
-                  ))}
-                </fieldset>
+              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                  <h2 className="flex items-center gap-2 text-base font-semibold text-ink">
+                    <History className="h-4 w-4 text-signal" strokeWidth={1.75} />
+                    アクティブ履歴
+                  </h2>
+                  <fieldset className="flex flex-wrap items-center gap-3 text-sm text-ink">
+                    <legend className="sr-only">履歴の表示範囲</legend>
+                    {(
+                      [
+                        [HISTORY_ALL, "すべて"],
+                        [HISTORY_EVENTS_ONLY, "イベントのみ"],
+                      ] as const
+                    ).map(([value, label]) => (
+                      <label key={value} className="inline-flex cursor-pointer items-center gap-1.5">
+                        <input
+                          type="radio"
+                          name="history-filter"
+                          value={value}
+                          checked={historyFilter === value}
+                          onChange={() => setHistoryFilter(value)}
+                          className="accent-signal"
+                        />
+                        <span>{label}</span>
+                      </label>
+                    ))}
+                  </fieldset>
+                </div>
+                <MiniHelpButton onClick={() => setTabHelpModalOpen("history")} />
               </div>
               <p className="mt-1 text-sm text-ink-soft">
                 {historyFilter === HISTORY_ALL
@@ -1398,33 +1469,36 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
           )}
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                <h2 className="flex items-center gap-2 text-base font-semibold text-ink">
-                  <ImageIcon className="h-4 w-4 text-signal" strokeWidth={1.75} />
-                  画像表示
-                </h2>
-                <fieldset className="flex flex-wrap items-center gap-3 text-sm text-ink">
-                  <legend className="sr-only">処理状態で絞り込み</legend>
-                  {(
-                    [
-                      [PROCESSED_ALL, "すべて"],
-                      [PROCESSED_UNPROCESSED, "未処理のみ"],
-                      [PROCESSED_DONE, "処理済のみ"],
-                    ] as const
-                  ).map(([value, label]) => (
-                    <label key={value} className="inline-flex cursor-pointer items-center gap-1.5">
-                      <input
-                        type="radio"
-                        name="processed-filter"
-                        value={value}
-                        checked={processedFilter === value}
-                        onChange={() => setProcessedFilter(value)}
-                        className="accent-signal"
-                      />
-                      <span>{label}</span>
-                    </label>
-                  ))}
-                </fieldset>
+              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                  <h2 className="flex items-center gap-2 text-base font-semibold text-ink">
+                    <ImageIcon className="h-4 w-4 text-signal" strokeWidth={1.75} />
+                    画像表示
+                  </h2>
+                  <fieldset className="flex flex-wrap items-center gap-3 text-sm text-ink">
+                    <legend className="sr-only">処理状態で絞り込み</legend>
+                    {(
+                      [
+                        [PROCESSED_ALL, "すべて"],
+                        [PROCESSED_UNPROCESSED, "未処理のみ"],
+                        [PROCESSED_DONE, "処理済のみ"],
+                      ] as const
+                    ).map(([value, label]) => (
+                      <label key={value} className="inline-flex cursor-pointer items-center gap-1.5">
+                        <input
+                          type="radio"
+                          name="processed-filter"
+                          value={value}
+                          checked={processedFilter === value}
+                          onChange={() => setProcessedFilter(value)}
+                          className="accent-signal"
+                        />
+                        <span>{label}</span>
+                      </label>
+                    ))}
+                  </fieldset>
+                </div>
+                <MiniHelpButton onClick={() => setTabHelpModalOpen("images")} />
               </div>
               <p className="mt-1 text-sm text-ink-soft">
                 自動撮影で保存された画像を表示します。
@@ -1718,6 +1792,39 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
         </div>
       )}
 
+
+      {tabHelpModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="tab-help-modal-title"
+          onClick={() => setTabHelpModalOpen(null)}
+        >
+          <div
+            className="w-full max-w-lg rounded-lg border border-line bg-white shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-3">
+              <h2 id="tab-help-modal-title" className="text-base font-semibold text-ink">
+                {TAB_HELP_CONTENT[tabHelpModalOpen].title}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setTabHelpModalOpen(null)}
+                className="text-sm text-ink-soft hover:text-ink"
+              >
+                閉じる
+              </button>
+            </div>
+            <div className="space-y-3 px-5 py-4 text-sm leading-relaxed text-ink">
+              {TAB_HELP_CONTENT[tabHelpModalOpen].body.map((paragraph, index) => (
+                <p key={index}>{paragraph}</p>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {imagePreview && (
         <div
