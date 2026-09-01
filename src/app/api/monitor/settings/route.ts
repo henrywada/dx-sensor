@@ -3,12 +3,18 @@ import { getViewerContext } from "@/lib/auth/getViewerContext";
 import type { MonitorUserSettings } from "@/lib/monitor/types";
 import { createServerSupabase } from "@/lib/supabase/server";
 
-const SLOT_COUNT = 10;
+const SLOT_COUNT = 11;
+/** 最後の1枠は出力フォーマット（回答の文型サンプル）専用として固定ラベルにする。 */
+const OUTPUT_FORMAT_SLOT_INDEX = SLOT_COUNT - 1;
+
+function defaultLabelFor(index: number): string {
+  return index === OUTPUT_FORMAT_SLOT_INDEX ? "出力フォーマット" : `項目${index + 1}`;
+}
 
 const DEFAULT_SETTINGS: MonitorUserSettings = {
   title: "",
   email: null,
-  slotLabels: Array.from({ length: SLOT_COUNT }, (_, i) => `項目${i + 1}`),
+  slotLabels: Array.from({ length: SLOT_COUNT }, (_, i) => defaultLabelFor(i)),
   slotValues: Array.from({ length: SLOT_COUNT }, () => ""),
   templateId: null,
 };
@@ -38,7 +44,7 @@ function serializeSettings(row: SettingsRow | null): MonitorUserSettings {
   return {
     title: row.title ?? "",
     email: row.email,
-    slotLabels: normalizeSlotStrings(row.slot_labels, (i) => `項目${i + 1}`),
+    slotLabels: normalizeSlotStrings(row.slot_labels, (i) => defaultLabelFor(i)),
     slotValues: normalizeSlotStrings(row.slot_values, () => ""),
     templateId: row.template_id,
   };
@@ -66,7 +72,7 @@ function parseSettingsBody(body: unknown): MonitorUserSettings | null {
     title,
     email,
     slotLabels: Array.isArray(slotLabels)
-      ? normalizeSlotStrings(slotLabels, (i) => `項目${i + 1}`)
+      ? normalizeSlotStrings(slotLabels, (i) => defaultLabelFor(i))
       : DEFAULT_SETTINGS.slotLabels,
     slotValues: normalizeSlotStrings(slotValues, () => ""),
     templateId,

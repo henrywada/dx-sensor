@@ -29,7 +29,7 @@ import {
   resolveStartButtonState,
 } from "@/lib/monitor/monitorButtonState";
 
-const SLOT_COUNT = 10;
+const SLOT_COUNT = 11;
 const TICK_INTERVAL_MS = 5_000;
 const IMAGE_PAGE_SIZE = 80;
 const PROCESSED_ALL = "all";
@@ -62,6 +62,7 @@ const TAB_HELP_CONTENT: Record<TabId, { title: string; body: string[] }> = {
       "AIに「何を」「どんな基準で」チェックしてほしいかを、日本語の文章で伝えるための設定画面です。",
       "「テンプレート」を選べば、よくある使い方（駐車場の空き確認など）がすぐ使える形で入ります。「白紙から作成」を選べば、自分の言葉で条件を一から書けます。",
       "ここで入力した内容は、そのままAIへの指示文の材料になります。",
+      "最後の項目「出力フォーマット」には、AIに答えてほしい文章の“型”を書いておきます。例えば「駐車台数（○台）、空き駐車スポット（○台）です。」のように書くと、AIは毎回その形に沿って実際の値だけを当てはめて答えるようになり、回答の書き方がばらつきにくくなります。",
     ],
   },
   status: {
@@ -151,9 +152,16 @@ type CaptureImage = AutoCaptureRow & {
   imageNo: number | null;
 };
 
+/** 最後の1枠は出力フォーマット（回答の文型サンプル）専用として固定ラベルにする。 */
+const OUTPUT_FORMAT_SLOT_INDEX = SLOT_COUNT - 1;
+
+function defaultLabelFor(index: number): string {
+  return index === OUTPUT_FORMAT_SLOT_INDEX ? "出力フォーマット" : `項目${index + 1}`;
+}
+
 const emptySlots = () => Array.from({ length: SLOT_COUNT }, () => "");
 const defaultLabels = () =>
-  Array.from({ length: SLOT_COUNT }, (_, index) => `項目${index + 1}`);
+  Array.from({ length: SLOT_COUNT }, (_, index) => defaultLabelFor(index));
 
 function normalizeSlots(values: string[] | undefined): string[] {
   return Array.from({ length: SLOT_COUNT }, (_, index) => values?.[index] ?? "");
@@ -162,7 +170,7 @@ function normalizeSlots(values: string[] | undefined): string[] {
 function normalizeLabels(values: string[] | undefined): string[] {
   return Array.from({ length: SLOT_COUNT }, (_, index) => {
     const value = values?.[index]?.trim();
-    return value ? value : `項目${index + 1}`;
+    return value ? value : defaultLabelFor(index);
   });
 }
 
@@ -236,6 +244,8 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
   // Gemini Vision APIまで進んだ回のみ入る解析結果(summary)。sharp+SSIM+pixelmatchの
   // 差分判定だけでskipした回では更新しない（前回のGemini解析結果を表示し続ける）。
   const [aiSummary, setAiSummary] = useState<string | null>(null);
+  // aiSummaryを更新した時刻。日時はAIに生成させず、ここで確定的に記録して表示時に先頭付与する。
+  const [aiSummaryAt, setAiSummaryAt] = useState<string | null>(null);
   const [monitorCount, setMonitorCount] = useState(0);
   const [prevImageNo, setPrevImageNo] = useState<number | null>(null);
   const [currImageNo, setCurrImageNo] = useState<number | null>(null);
@@ -745,6 +755,7 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
       setLastMessage(result.summary || result.message || "監視処理が完了しました");
       if (result.summary) {
         setAiSummary(result.summary);
+        setAiSummaryAt(new Date().toISOString());
       }
       setPrevImageUrl(result.prevSignedUrl);
       setCurrImageUrl(result.currSignedUrl);
@@ -1136,8 +1147,25 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
                 </span>
               </label>
 
+              <div className="space-y-1.5 rounded-md border border-line p-3">
+                <span className="text-xs font-medium text-ink-soft">
+                  出力フォーマットの説明、使い方の文章（空欄の場合はAIが自由な文章で回答します）
+                </span>
+                <textarea
+                  rows={3}
+                  value={slotValues[OUTPUT_FORMAT_SLOT_INDEX] ?? ""}
+                  onChange={(e) => {
+                    const next = normalizeSlots(slotValues);
+                    next[OUTPUT_FORMAT_SLOT_INDEX] = e.target.value;
+                    setSlotValues(next);
+                  }}
+                  className="w-full resize-none rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-signal focus:ring-1 focus:ring-signal"
+                  placeholder="例：駐車台数（○台）（内訳：色）、空き駐車スポット（○台）です。"
+                />
+              </div>
+
               <div className="grid gap-3 sm:grid-cols-2">
-                {slotLabels.map((label, index) => (
+                {slotLabels.slice(0, OUTPUT_FORMAT_SLOT_INDEX).map((label, index) => (
                   <div key={`slot-${index}`} className="space-y-1.5 rounded-md border border-line p-3">
                     <label className="block space-y-1">
                       <span className="text-xs font-medium text-ink-soft">項目名 {index + 1}</span>
@@ -1276,7 +1304,10 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
 
           {aiSummary && (
             <div className="rounded-lg bg-pink-100 px-4 py-3 text-left text-sm text-pink-700">
-              <p className="line-clamp-3">{aiSummary}</p>
+              <p className="line-clamp-3">
+                {aiSummaryAt ? `${formatTimestamp(aiSummaryAt)} ` : ""}
+                {aiSummary}
+              </p>
             </div>
           )}
 

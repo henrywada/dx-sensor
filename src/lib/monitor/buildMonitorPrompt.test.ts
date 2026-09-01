@@ -32,4 +32,26 @@ describe("buildMonitorPrompt", () => {
       "minor",
     ]);
   });
+
+  it("converts an output-format slot into a summary-shaping instruction instead of a regular slot line", () => {
+    const prompt = buildMonitorPrompt({
+      title: "駐車場監視",
+      labels: ["監視ポイント", "出力フォーマット"],
+      values: ["空きか駐車中か", "駐車台数（○台）、空き駐車スポット（○台）です。"],
+    });
+    expect(prompt).toContain("監視ポイント: 空きか駐車中か");
+    expect(prompt).not.toContain("出力フォーマット: 駐車台数");
+    expect(prompt).toContain("文型");
+    expect(prompt).toContain("駐車台数（○台）、空き駐車スポット（○台）です。");
+    expect(prompt).toContain("日時");
+  });
+
+  it("falls back to free-form summary instructions when the output-format slot is empty", () => {
+    const prompt = buildMonitorPrompt({
+      title: "駐車場監視",
+      labels: ["監視ポイント", "出力フォーマット"],
+      values: ["空きか駐車中か", ""],
+    });
+    expect(prompt).not.toContain("文型");
+  });
 });
