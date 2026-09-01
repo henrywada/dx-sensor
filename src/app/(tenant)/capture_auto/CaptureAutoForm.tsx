@@ -526,16 +526,18 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
             ))}
           </select>
         </label>
-        <button
-          type="button"
-          onClick={() => {
-            setBaseCaptureError(null);
-            setBaseCaptureModalOpen(true);
-          }}
-          className="ml-auto rounded-md bg-pink-100 px-3 py-1.5 text-sm font-medium text-pink-700 transition hover:bg-pink-200"
-        >
-          基本写真を撮る
-        </button>
+        {!autoRunning && (
+          <button
+            type="button"
+            onClick={() => {
+              setBaseCaptureError(null);
+              setBaseCaptureModalOpen(true);
+            }}
+            className="ml-auto rounded-md bg-blue-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            基本写真を撮る
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-3">

@@ -233,6 +233,13 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
   const [promptModalOpen, setPromptModalOpen] = useState(false);
   const [tabHelpModalOpen, setTabHelpModalOpen] = useState<TabId | null>(null);
   const [eventCompareModal, setEventCompareModal] = useState<EventCompareModal | null>(null);
+  // クリック時点のURLをスナップショットして保持する（監視が動き続けて
+  // currImageUrl等が更新されても、開いている拡大表示は切り替わらないようにするため）。
+  const [zoomedImage, setZoomedImage] = useState<{
+    title: string;
+    imageNo: number | null;
+    url: string;
+  } | null>(null);
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
   const [settingsError, setSettingsError] = useState<string | null>(null);
 
@@ -1305,7 +1312,11 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
           {aiSummary && (
             <div className="rounded-lg bg-pink-100 px-4 py-3 text-left text-sm text-pink-700">
               <p className="line-clamp-3">
-                {aiSummaryAt ? `${formatTimestamp(aiSummaryAt)} ` : ""}
+                {aiSummaryAt && (
+                  <span className="mr-2 font-semibold text-pink-900">
+                    {formatTimestamp(aiSummaryAt)}
+                  </span>
+                )}
                 {aiSummary}
               </p>
             </div>
@@ -1374,6 +1385,11 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
             probeUrl={currImageUrl ?? prevImageUrl}
             curr={{ title: "今回画像", imageNo: currImageNo, url: currImageUrl }}
             prev={{ title: "前回画像", imageNo: prevImageNo, url: prevImageUrl }}
+            compact
+            onImageClick={(panel) => {
+              if (!panel.url) return;
+              setZoomedImage({ title: panel.title, imageNo: panel.imageNo, url: panel.url });
+            }}
           />
 
         </section>
@@ -1977,6 +1993,46 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
         </div>
       )}
 
+      {zoomedImage && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="zoomed-image-modal-title"
+          onClick={() => setZoomedImage(null)}
+        >
+          <div
+            className="flex max-h-[min(90vh,840px)] w-full max-w-4xl flex-col rounded-lg border border-line bg-white shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line px-5 py-3">
+              <h2 id="zoomed-image-modal-title" className="text-base font-semibold text-ink">
+                {zoomedImage.title}
+                {zoomedImage.imageNo != null ? (
+                  <span className="ml-2 font-en text-sm font-medium text-ink-soft">
+                    #{zoomedImage.imageNo}
+                  </span>
+                ) : null}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setZoomedImage(null)}
+                className="text-sm text-ink-soft hover:text-ink"
+              >
+                閉じる
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+              <NaturalAspectImage
+                src={zoomedImage.url}
+                alt={zoomedImage.title}
+                maxHeightClassName="max-h-[75vh]"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       {promptModalOpen && (
         <div
           className="fixed inset-0 z-50 flex items-end justify-center bg-ink/50 p-4 sm:items-center"
@@ -2147,11 +2203,13 @@ function ImagePanel({
   imageNo,
   url,
   maxHeightClassName,
+  onClick,
 }: {
   title: string;
   imageNo: number | null;
   url: string | null;
   maxHeightClassName?: string;
+  onClick?: () => void;
 }) {
   return (
     <div className="overflow-hidden rounded-lg border border-line bg-white">
@@ -2161,11 +2219,26 @@ function ImagePanel({
           <span className="ml-2 font-en text-ink-soft">#{imageNo}</span>
         ) : null}
       </div>
-      <NaturalAspectImage
-        src={url}
-        alt={title}
-        maxHeightClassName={maxHeightClassName}
-      />
+      {onClick && url ? (
+        <button
+          type="button"
+          onClick={onClick}
+          className="block w-full cursor-zoom-in"
+          aria-label={`${title}を拡大表示`}
+        >
+          <NaturalAspectImage
+            src={url}
+            alt={title}
+            maxHeightClassName={maxHeightClassName}
+          />
+        </button>
+      ) : (
+        <NaturalAspectImage
+          src={url}
+          alt={title}
+          maxHeightClassName={maxHeightClassName}
+        />
+      )}
     </div>
   );
 }
@@ -2176,15 +2249,22 @@ type ComparePanel = {
   url: string | null;
 };
 
-/** Portrait → 2-up grid; landscape → stacked rows (current layout). */
+/**
+ * compact=false: Portrait → 2-up grid; landscape → stacked rows（比較モーダル用）。
+ * compact=true: 常に2列で縮小表示（監視状況タブのリアルタイム表示用）。
+ */
 function CompareImageGrid({
   probeUrl,
   curr,
   prev,
+  compact = false,
+  onImageClick,
 }: {
   probeUrl: string | null;
   curr: ComparePanel;
   prev: ComparePanel;
+  compact?: boolean;
+  onImageClick?: (panel: ComparePanel) => void;
 }) {
   const [isPortrait, setIsPortrait] = useState(false);
 
@@ -2208,11 +2288,16 @@ function CompareImageGrid({
     };
   }, [probeUrl]);
 
-  const maxHeightClassName = isPortrait ? "max-h-[55vh]" : "max-h-[70vh]";
+  const maxHeightClassName = compact
+    ? "max-h-[24vh]"
+    : isPortrait
+      ? "max-h-[55vh]"
+      : "max-h-[70vh]";
+  const gridColsClassName = compact || isPortrait ? "grid-cols-2" : "grid-cols-1";
   const panels = [curr, prev];
 
   return (
-    <div className={`grid gap-4 ${isPortrait ? "grid-cols-2" : "grid-cols-1"}`}>
+    <div className={`grid gap-4 ${gridColsClassName}`}>
       {panels.map((panel) => (
         <ImagePanel
           key={panel.title}
@@ -2220,6 +2305,7 @@ function CompareImageGrid({
           imageNo={panel.imageNo}
           url={panel.url}
           maxHeightClassName={maxHeightClassName}
+          onClick={onImageClick ? () => onImageClick(panel) : undefined}
         />
       ))}
     </div>
