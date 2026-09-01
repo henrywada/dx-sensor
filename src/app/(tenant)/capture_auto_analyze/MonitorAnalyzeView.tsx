@@ -233,6 +233,9 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
   const [lastSeverity, setLastSeverity] = useState<MonitorSeverity | null>(null);
   const [lastDiffScore, setLastDiffScore] = useState<number | null>(null);
   const [lastMessage, setLastMessage] = useState("監視を開始すると5秒ごとに解析します。");
+  // Gemini Vision APIまで進んだ回のみ入る解析結果(summary)。sharp+SSIM+pixelmatchの
+  // 差分判定だけでskipした回では更新しない（前回のGemini解析結果を表示し続ける）。
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [monitorCount, setMonitorCount] = useState(0);
   const [prevImageNo, setPrevImageNo] = useState<number | null>(null);
   const [currImageNo, setCurrImageNo] = useState<number | null>(null);
@@ -740,6 +743,9 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
       setLastSeverity(result.status === "waiting" ? null : (result.severity ?? "skip"));
       setLastDiffScore(result.diffScore);
       setLastMessage(result.summary || result.message || "監視処理が完了しました");
+      if (result.summary) {
+        setAiSummary(result.summary);
+      }
       setPrevImageUrl(result.prevSignedUrl);
       setCurrImageUrl(result.currSignedUrl);
       setPrevImageNo(result.prevCaptureNo ?? null);
@@ -860,6 +866,7 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
       setLastSeverity(null);
       setLastDiffScore(null);
       setLastMessage("監視を開始しました。次の画像を確認しています。");
+      setAiSummary(null);
       setPrevImageUrl(null);
       setCurrImageUrl(null);
       setPrevImageNo(null);
@@ -1266,6 +1273,12 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
               )}
             </div>
           </div>
+
+          {aiSummary && (
+            <div className="rounded-lg bg-pink-100 px-4 py-3 text-left text-sm text-pink-700">
+              <p className="line-clamp-3">{aiSummary}</p>
+            </div>
+          )}
 
           {monitoring && (
             <div className="overflow-hidden rounded-lg border border-signal/20 bg-signal/5 px-4 py-3">

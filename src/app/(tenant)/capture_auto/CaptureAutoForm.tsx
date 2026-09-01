@@ -416,16 +416,6 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
           )}
         </div>
         <div className="flex shrink-0 items-center gap-3">
-          <button
-            type="button"
-            onClick={() => {
-              setBaseCaptureError(null);
-              setBaseCaptureModalOpen(true);
-            }}
-            className="flex items-center gap-1 text-sm font-medium text-signal transition-colors hover:text-ink"
-          >
-            基本写真を撮る
-          </button>
           <Link
             href="/"
             className="text-sm font-medium text-signal transition-colors hover:text-ink"
@@ -520,21 +510,33 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
         </select>
       </label>
 
-      <label className="flex items-center justify-between gap-3 text-sm text-ink">
-        <span>撮影間隔</span>
-        <select
-          value={intervalSec}
-          disabled={autoRunning}
-          onChange={(e) => setIntervalSec(Number(e.target.value))}
-          className="rounded-md border border-line bg-white px-3 py-1.5 text-sm outline-none focus:border-signal focus:ring-1 focus:ring-signal disabled:opacity-50"
+      <div className="flex items-center gap-3 text-sm text-ink">
+        <label className="flex items-center gap-2">
+          <span>撮影間隔</span>
+          <select
+            value={intervalSec}
+            disabled={autoRunning}
+            onChange={(e) => setIntervalSec(Number(e.target.value))}
+            className="rounded-md border border-line bg-white px-3 py-1.5 text-sm outline-none focus:border-signal focus:ring-1 focus:ring-signal disabled:opacity-50"
+          >
+            {INTERVAL_OPTIONS_SEC.map((sec) => (
+              <option key={sec} value={sec}>
+                {sec}秒
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="button"
+          onClick={() => {
+            setBaseCaptureError(null);
+            setBaseCaptureModalOpen(true);
+          }}
+          className="ml-auto rounded-md bg-pink-100 px-3 py-1.5 text-sm font-medium text-pink-700 transition hover:bg-pink-200"
         >
-          {INTERVAL_OPTIONS_SEC.map((sec) => (
-            <option key={sec} value={sec}>
-              {sec}秒
-            </option>
-          ))}
-        </select>
-      </label>
+          基本写真を撮る
+        </button>
+      </div>
 
       <div className="grid grid-cols-2 gap-3">
         {autoRunning ? (
