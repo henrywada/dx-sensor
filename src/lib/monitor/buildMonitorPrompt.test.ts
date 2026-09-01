@@ -54,4 +54,16 @@ describe("buildMonitorPrompt", () => {
     });
     expect(prompt).not.toContain("文型");
   });
+
+  it("instructs Gemini to read the current-image state first, then append the comparison-based change description", () => {
+    const prompt = buildMonitorPrompt({
+      title: "駐車場監視",
+      labels: ["出力フォーマット"],
+      values: ["駐車台数（○台）、空き駐車スポット（○台）です。"],
+    });
+    expect(prompt).toContain("後画像（今回の写真）");
+    expect(prompt).toContain("先頭");
+    expect(prompt).toContain("追記");
+    expect(prompt).toContain("変化");
+  });
 });
