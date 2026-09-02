@@ -43,6 +43,35 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "expired" }, { status: 401 });
   }
 
+  const { data: claimed, error: claimError } = await service
+    .from("line_friend_invites")
+    .update({ used_at: new Date().toISOString() })
+    .eq("id", invite.id)
+    .is("used_at", null)
+    .select("id");
+
+  if (claimError) {
+    console.error("friend-link-accept: used_at claim failed", claimError);
+    return NextResponse.json({ error: "link_failed" }, { status: 500 });
+  }
+  if (!claimed || claimed.length === 0) {
+    return NextResponse.json({ error: "already_used" }, { status: 401 });
+  }
+
+  const { data: existingFriend, error: existingFriendError } = await service
+    .from("line_friends")
+    .select("user_id")
+    .eq("line_user_id", lineUserId)
+    .maybeSingle();
+
+  if (existingFriendError) {
+    console.error("friend-link-accept: line_friends lookup failed", existingFriendError);
+    return NextResponse.json({ error: "link_failed" }, { status: 500 });
+  }
+  if (existingFriend?.user_id && existingFriend.user_id !== invite.user_id) {
+    return NextResponse.json({ error: "token_invalid" }, { status: 401 });
+  }
+
   const { error: upsertError } = await service.from("line_friends").upsert(
     {
       line_user_id: lineUserId,
@@ -58,11 +87,6 @@ export async function POST(req: Request) {
     console.error("friend-link-accept: line_friends upsert failed", upsertError);
     return NextResponse.json({ error: "link_failed" }, { status: 500 });
   }
-
-  await service
-    .from("line_friend_invites")
-    .update({ used_at: new Date().toISOString() })
-    .eq("id", invite.id);
 
   return NextResponse.json({ ok: true });
 }
