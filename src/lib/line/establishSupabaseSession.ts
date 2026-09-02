@@ -2,7 +2,7 @@ type GenerateLinkClient = {
   auth: {
     admin: {
       generateLink: (params: { type: "magiclink"; email: string }) => Promise<{
-        data: { properties?: { hashed_token?: string } } | null;
+        data: { properties?: { hashed_token?: string } | null } | null;
         error: { message: string } | null;
       }>;
     };
