@@ -9,8 +9,16 @@ dx-sensorに、LINE公式アカウントのリッチメニュー経由でのア�
 
 現場ユーザーとPCユーザー（管理者含む）で求められる体験が異なるため、2つの入口を用意する。
 
-1. **現場ユーザー**: LINE友だちのリッチメニューから、ログイン無しで簡単な入力画面（書類キャプチャー・写真送信・定点撮影）にアクセスできる。毎回のログインは不要。
+1. **現場ユーザー**: LINE友だちのリッチメニューから、ログイン無しでテナントダッシュボード（`/`）にアクセスでき、そこから書類キャプチャー・写真送信・定点監視などの入力画面を選べる。毎回のログインは不要。
 2. **PCユーザー（現場ユーザー・管理者とも）**: 情報量が多い検索画面・管理画面は、PCから通常どおり「ログイン」してアクセスする。
+
+### 補足: リッチメニューの遷移先はダッシュボード1箇所
+
+設計初期段階では「書類キャプチャー」「写真送信」「定点撮影」の3画面に個別のリッチメニューボタンを割り当てる案を検討したが、以下の理由でリッチメニューは**1ボタン→`(tenant)/page.tsx`（`/`、既存のテナントダッシュボード）への遷移のみ**に単純化した。
+
+- `(tenant)/page.tsx` は既に「定点監視カメラ」「写真レポート」「文書ホルダー」のカテゴリでdocuments/new・send_picture・capture_auto等への入口を網羅したカタログページであり、個別ボタンを作る必要がない
+- 一般ユーザー向けの単純な「手動撮影」専用ページは現状存在しない（`(admin)/admin/capture`は`isDeveloper`必須の開発者専用ページであり流用不可）。ダッシュボード経由にすることでこの画面欠落の問題も回避できる
+- `target`パラメータや許可リストといった複雑さが不要になり、実装・保守コストが下がる（YAGNI）
 
 ## 前提・既存実装の確認結果
 
@@ -41,7 +49,7 @@ dx-sensorに、LINE公式アカウントのリッチメニュー経由でのア�
 現場ユーザー(LINE)                     PCユーザー(現場/管理者)
   │ リッチメニュータップ                    │ 通常ブラウザ
   ▼                                        ▼
-/liff/entry?target=xxx (新設)          /(auth)/login (既存拡張)
+/liff/entry (新設)                     /(auth)/login (既存拡張)
   │ LIFF SDK初期化                          │ ①メール+パスワード
   │ IDトークン取得                          │ ②初回はパスワード未設定
   ▼                                        │   →リセットリンクで設定
@@ -50,8 +58,8 @@ POST /api/line/liff-auth (新設)             ▼
   │ line_friends照合                          │
   │ 既存アカウント→自動セッション確立         │
   ▼                                        ▼
-        既存の(tenant)配下ページ（documents/new, send_picture, capture等）
-        ── getViewerContext() / getActiveTenant() は無改修 ──
+        (tenant)/page.tsx「/」テナントダッシュボード（既存、無改修）
+        ── getViewerContext() / getActiveTenant() も無改修 ──
 ```
 
 LINE経由・PC経由のどちらも、最終的には同一のSupabase Authセッション（Cookie）に収束する。`(tenant)/layout.tsx` や各ページの認可ロジックは一切変更しない。
@@ -118,10 +126,6 @@ create policy line_friends_tenant_isolation on line_friends
 
 LINEのIDトークン（JWT）検証には `jose` パッケージを新規追加する。検証項目: 署名（LINEのJWKSエンドポイントから取得した鍵）、`aud`（LIFF ID一致）、`iss`（`https://access.line.me`）、`exp`。
 
-### targetパラメータの許可リスト
-
-`target` は `documents/new` / `send_picture` / `capture` の**許可リストのみ**受け付ける。任意文字列をそのままリダイレクト先に使わない（オープンリダイレクト対策）。
-
 ## LIFF画面
 
 `src/app/liff/entry/page.tsx`（`(tenant)` / `(admin)` / `(auth)` いずれのルートグループにも属さない独立ルート。`(tenant)/layout.tsx` のログイン必須ガードを経由しないため）
@@ -130,24 +134,21 @@ LINEのIDトークン（JWT）検証には `jose` パッケージを新規追加
 1. マウント時にLIFF SDK初期化（`liff.init({ liffId })`）
 2. `liff.isLoggedIn()` でなければ `liff.login()`（LINEアプリ内なら自動遷移）
 3. `liff.getIDToken()` でIDトークン取得
-4. URLの `target=` パラメータを読む
-5. `POST /api/line/liff-auth` に `{ idToken, target }` を送信
-6. 成功: サーバーがSet-Cookieでセッション確立済み → `target` 先へ `window.location.assign`
-7. 失敗時、理由で分岐:
-   - `not_linked`（初回・未紐付け） → `/liff/link?invite=...` へ誘導
+4. `POST /api/line/liff-auth` に `{ idToken }` を送信
+5. 成功: サーバーがSet-Cookieでセッション確立済み → `/`（テナントダッシュボード）へ `window.location.assign`
+6. 失敗時、理由で分岐:
+   - `not_linked`（初回・未紐付け） → `/liff/link?t={invite_token}` へ誘導（招待メール記載の招待URLから改めてアクセスするよう案内）
    - `token_invalid` / `expired` → LIFFエラー画面（再読み込み案内）
 
-`src/app/liff/link/page.tsx` — 招待URL（`/liff/link?t={invite_token}`）からLINEブラウザで開かれる。LIFF初期化→IDトークン取得→`POST /api/line/invite-accept`→成功後は `entry` と同じくセッション確立→該当画面へ遷移。
+`src/app/liff/link/page.tsx` — 招待URL（`/liff/link?t={invite_token}`）からLINEブラウザで開かれる。LIFF初期化→IDトークン取得→`POST /api/line/invite-accept`→成功後は `entry` と同じくセッション確立→`/`へ遷移。
 
 ## リッチメニュー構成
 
-全テナント共通のリッチメニュー1種類（テナント別カスタマイズは対象外）。3ボタン構成。
+全テナント共通のリッチメニュー1種類（テナント別カスタマイズは対象外）。**1ボタン構成**、遷移先は`(tenant)/page.tsx`（`/`テナントダッシュボード）に固定。
 
 | ボタン | 遷移先 |
 |---|---|
-| 書類キャプチャー | `https://liff.line.me/{LIFF_ID}?target=documents/new` |
-| 写真送信 | `https://liff.line.me/{LIFF_ID}?target=send_picture` |
-| 定点撮影 | `https://liff.line.me/{LIFF_ID}?target=capture` |
+| dx-sensorを開く | `https://liff.line.me/{LIFF_ID}` |
 
 作成・デフォルト適用は Messaging API の `POST /v2/bot/richmenu` と `POST /v2/bot/user/all/richmenu/{richMenuId}` を叩くセットアップスクリプトとして用意する（一度実行すればよく、運用スクリプトとしてAPIルートに常駐させる必要はない）。
 
@@ -174,7 +175,7 @@ LINE経由の自動作成アカウントはパスワード未設定のため、�
 
 ## テスト方針
 
-- **単体**: JWT検証ロジック（`jose`ラッパー関数）、`target`許可リストのバリデーション
+- **単体**: JWT検証ロジック（`jose`ラッパー関数）、Webhook署名検証、招待トークン生成
 - **統合**: `/api/line/invite-accept` と `/api/line/liff-auth` をモックIDトークンで疎通確認。RLS越しに `tenant_members` / `line_friends` が正しいテナントスコープで作成されるかを検証（`tenant_id`フィルタの取り違えがないこと、を最終防御線として明示的にテストする）
 - **E2E**: LIFF実機はLINEアプリ内ブラウザでしか正確に検証できないため、Playwright自動化は費用対効果が低い。手動確認手順（curlでのWebhookテスト、LIFFのブラウザ確認手順、マジックリンクのメール受信確認）を実装計画に明記し、各ステップ完了後に確認する
 
