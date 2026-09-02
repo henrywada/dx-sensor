@@ -31,6 +31,8 @@ export function createServerSupabase() {
  * Service-role client — bypasses RLS. Only use in:
  *  - Vercel Cron jobs (snapshot ingestion, ANPR pipeline)
  *  - server-side jobs that write vehicle_events on behalf of the system
+ *  - LINE連携の認証フロー(api/line/webhook, api/line/invite-accept, api/line/liff-auth) —
+ *    line_friends/tenant_member_invitesの読み書きとauth.users作成にservice_roleが必要なため
  * Never expose this client or its key to the browser.
  */
 export function createServiceSupabase() {

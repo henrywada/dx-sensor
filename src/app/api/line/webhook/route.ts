@@ -1,0 +1,74 @@
+import { NextResponse } from "next/server";
+import { buildFollowReplyMessage } from "@/lib/line/buildFollowReplyMessage";
+import { replyLineMessage } from "@/lib/line/lineMessagingClient";
+import { parseWebhookEvents } from "@/lib/line/parseWebhookEvents";
+import { verifyLineWebhookSignature } from "@/lib/line/verifyWebhookSignature";
+import { createServiceSupabase } from "@/lib/supabase/server";
+
+export async function POST(req: Request) {
+  const channelSecret = process.env.LINE_CHANNEL_SECRET;
+  const channelAccessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+  const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
+
+  if (!channelSecret || !channelAccessToken || !liffId) {
+    console.error("LINE env vars are not configured");
+    return NextResponse.json({ error: "server misconfigured" }, { status: 500 });
+  }
+
+  const rawBody = await req.text();
+  const signature = req.headers.get("x-line-signature");
+
+  const isValid = verifyLineWebhookSignature({
+    rawBody,
+    signatureHeader: signature,
+    channelSecret,
+  });
+  if (!isValid) {
+    return NextResponse.json({ error: "invalid signature" }, { status: 401 });
+  }
+
+  let events;
+  try {
+    events = parseWebhookEvents(JSON.parse(rawBody));
+  } catch {
+    // 個人情報を含みうるペイロードはログしない
+    return NextResponse.json({ error: "invalid body" }, { status: 400 });
+  }
+
+  const supabase = createServiceSupabase();
+
+  for (const event of events) {
+    if (event.type === "follow") {
+      const { data: existing } = await supabase
+        .from("line_friends")
+        .select("id")
+        .eq("line_user_id", event.source.userId)
+        .maybeSingle();
+
+      if (!existing) {
+        await supabase.from("line_friends").insert({
+          line_user_id: event.source.userId,
+          status: "unlinked",
+        });
+      }
+
+      try {
+        await replyLineMessage({
+          channelAccessToken,
+          replyToken: event.replyToken,
+          messages: buildFollowReplyMessage(liffId),
+        });
+      } catch (replyError) {
+        console.error("failed to send LINE follow reply", replyError);
+      }
+    } else if (event.type === "unfollow") {
+      await supabase
+        .from("line_friends")
+        .update({ status: "blocked" })
+        .eq("line_user_id", event.source.userId);
+    }
+    // "message"イベントは自由対話を実装しないため無視する
+  }
+
+  return NextResponse.json({ ok: true });
+}
