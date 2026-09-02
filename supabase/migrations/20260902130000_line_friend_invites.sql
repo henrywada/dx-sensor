@@ -9,7 +9,8 @@ create table line_friend_invites (
   created_by uuid not null references auth.users(id),
   expires_at timestamptz not null,
   used_at timestamptz,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  foreign key (tenant_id, user_id) references tenant_members (tenant_id, user_id) on delete cascade
 );
 
 create index if not exists line_friend_invites_tenant_idx
