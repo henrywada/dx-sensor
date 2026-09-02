@@ -76,7 +76,7 @@ export function LiffFriendLinkView({ inviteToken }: LiffFriendLinkViewProps) {
   }
 
   if (state === "done") {
-    return <p className="p-6 text-center text-sm text-ink-soft">連携が完了しました。今後はLINEのリッチメニューからdx-sensorにアクセスできます。</p>;
+    return <p className="p-6 text-center text-sm text-ink">連携が完了しました。今後はLINEのリッチメニューからdx-sensorにアクセスできます。</p>;
   }
 
   return <p className="p-6 text-center text-sm text-alert">{ERROR_MESSAGES[state]}</p>;
