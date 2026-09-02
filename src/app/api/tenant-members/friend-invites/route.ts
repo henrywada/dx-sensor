@@ -66,6 +66,7 @@ export async function POST(req: Request) {
 
     const { data: userData, error: userError } = await service.auth.admin.getUserById(userId);
     if (userError || !userData?.user?.email) {
+      console.error("friend-invites: getUserById failed", userError);
       results.push({ userId, ok: false, error: "email_not_found" });
       continue;
     }
@@ -99,6 +100,10 @@ export async function POST(req: Request) {
       subject,
       html,
     });
+
+    if (!sendResult.ok) {
+      console.error("friend-invites: sendEmail failed", sendResult.error);
+    }
 
     results.push(
       sendResult.ok
