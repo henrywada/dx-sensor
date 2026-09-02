@@ -10,13 +10,15 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-02-line-integration-design.md`
 
+> **実装後の修正について:** 最終レビューで、この計画書に埋め込まれたコードのうち`aud`検証（`NEXT_PUBLIC_LIFF_ID`をIDトークンの監査対象として使っていた誤り）と`line_friends`のブロック解除デッドロックの2件に設計不備が見つかり、実際のコードでは修正済み。この計画書自体は歴史的記録として残し、埋め込みコードは遡って書き換えていない。詳細と修正内容はスペックの「実装後の修正履歴」セクションを参照。
+
 ## Global Constraints
 
 - 新規マイグレーションのファイル名はタイムスタンプ形式 `YYYYMMDDHHMMSS_description.sql` に従うこと（`0001`〜`0023`の連番形式は使わない）
 - `authenticated` ロールへのGRANTは新規テーブルごとに明示的に付与すること（`0007_grant_authenticated_tenant_members.sql`のGRANT漏れの教訓）
 - APIのリクエストボディ検証は既存の `src/app/api/documents/parseBody.ts` と同じ手動バリデーションパターンに従うこと（zodは使わない。プロジェクト内の既存APIルートがすべてこの手動パターンのため、一貫性を優先する）
 - リッチメニューは1ボタンのみで、遷移先は常に `/`（テナントダッシュボード）固定。`target`パラメータや許可リストは実装しない
-- LIFF IDは秘匿情報ではないため環境変数名は `NEXT_PUBLIC_LIFF_ID` を使う（クライアント側SDK初期化・サーバー側JWT `aud`検証の両方で同じ値を使う）。`LINE_CHANNEL_SECRET` と `LINE_CHANNEL_ACCESS_TOKEN` はサーバー専用シークレットとして`NEXT_PUBLIC_`を付けない
+- LIFF IDは秘匿情報ではないため環境変数名は `NEXT_PUBLIC_LIFF_ID` を使うが、**これはクライアント側`liff.init()`専用**。サーバー側のJWT `aud`検証には別の環境変数 `LINE_LOGIN_CHANNEL_ID`（LINEログインチャネルの数値チャネルID）を使う — LIFF IDとチャネルIDは異なる値であり、当初の計画（両方に`NEXT_PUBLIC_LIFF_ID`を流用）は最終レビューで判明した誤りだった。`LINE_CHANNEL_SECRET` と `LINE_CHANNEL_ACCESS_TOKEN` はサーバー専用シークレットとして`NEXT_PUBLIC_`を付けない
 - 既存の `src/lib/auth/getViewerContext.ts` / `src/lib/auth/getActiveTenant.ts` / `src/app/(tenant)/layout.tsx` / `(tenant)/page.tsx` は変更しない
 - テストファイルは対象ファイルと同じディレクトリに `*.test.ts` として配置し、`npx vitest run <path>` で実行する
 - 手動検証が必要な箇所（LINE Webhookの実機テスト、LIFFのLINEアプリ内ブラウザでの確認、マジックリンクのメール受信確認）はTask 18にまとめて記載する
@@ -2267,8 +2269,9 @@ Expected: 全テストPASS
 
 1. LINE Developersコンソールで、Messaging APIチャネルを作成（または既存チャネルを使用）
 2. チャネルシークレット・チャネルアクセストークンを発行し、`.env.production.local`（またはVercelの環境変数）に `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN` として設定
-3. 同じチャネルでLIFFアプリを作成（エンドポイントURL: `https://<デプロイ先ドメイン>/liff/entry`）し、発行されたLIFF IDを `NEXT_PUBLIC_LIFF_ID` に設定
-4. Webhook URLを `https://<デプロイ先ドメイン>/api/line/webhook` に設定し、Webhookを有効化
+3. 同じチャネルの数値チャネルIDを `LINE_LOGIN_CHANNEL_ID` として設定（LIFF IDとは別物。IDトークンの`aud`検証専用）
+4. 同じチャネルでLIFFアプリを作成し、発行されたLIFF IDを `NEXT_PUBLIC_LIFF_ID` に設定。エンドポイントURLは `/liff/entry` と `/liff/link` の両方を配下に含む `https://<デプロイ先ドメイン>/liff` に設定すること（個別ページのURLを設定すると、もう片方のページで`liff.login()`のリダイレクトが失敗する）
+5. Webhook URLを `https://<デプロイ先ドメイン>/api/line/webhook` に設定し、Webhookを有効化
 
 - [ ] **Step 3: Webhook署名検証をcurlで確認する**
 

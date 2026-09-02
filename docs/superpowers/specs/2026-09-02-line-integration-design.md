@@ -118,13 +118,15 @@ create policy line_friends_tenant_isolation on line_friends
 | `POST /api/tenant-members/invites` | `createServerSupabase()`（RLSスコープ） | admin/ownerが招待発行。`tenant_member_invites` にトークン発行、招待URLを返す |
 | `POST /api/line/webhook` | `createServiceSupabase()` | LINE Messaging APIのWebhook受信。`X-Line-Signature` をHMAC-SHA256で検証。`follow`/`unfollow`/`message` イベント処理 |
 | `POST /api/line/invite-accept` | `createServiceSupabase()` | 初回のみ。LIFF IDトークン検証→招待トークン照合→`auth.users`/`tenant_members`/`line_friends` を作成→セッション確立 |
-| `POST /api/line/liff-auth` | `createServiceSupabase()` | 2回目以降。LIFF IDトークン検証→既存 `line_friends` 照合→セッション確立→`target` の遷移先を返す |
+| `POST /api/line/liff-auth` | `createServiceSupabase()` | 2回目以降。LIFF IDトークン検証→既存 `line_friends` 照合→`tenant_members`在籍確認→セッション確立 |
 
 `createServiceSupabase()` の既存コメント（「Vercel Cronジョブ専用」）は、LINE関連の認証フローもservice_role利用の正当なユースケースとして追記が必要。
 
 ### IDトークン検証
 
-LINEのIDトークン（JWT）検証には `jose` パッケージを新規追加する。検証項目: 署名（LINEのJWKSエンドポイントから取得した鍵）、`aud`（LIFF ID一致）、`iss`（`https://access.line.me`）、`exp`。
+LINEのIDトークン（JWT）検証には `jose` パッケージを新規追加する。検証項目: 署名（LINEのJWKSエンドポイントから取得した鍵）、`aud`、`iss`（`https://access.line.me`）、`exp`。
+
+**重要な注意（実装時に判明した誤り）**: LINEのIDトークンの`aud`クレームは**LINEログインチャネルの数値チャネルID**であり、LIFF ID（`{チャネルID}-{サフィックス}`形式）とは別物。`aud`検証には`LINE_LOGIN_CHANNEL_ID`（新規env var）を使い、`NEXT_PUBLIC_LIFF_ID`は`liff.init()`のクライアント側初期化専用に限定すること。両者を混同すると`aud`検証が必ず失敗し、LINE経由のログインが機能しなくなる。
 
 ## LIFF画面
 
@@ -137,7 +139,7 @@ LINEのIDトークン（JWT）検証には `jose` パッケージを新規追加
 4. `POST /api/line/liff-auth` に `{ idToken }` を送信
 5. 成功: サーバーがSet-Cookieでセッション確立済み → `/`（テナントダッシュボード）へ `window.location.assign`
 6. 失敗時、理由で分岐:
-   - `not_linked`（初回・未紐付け） → `/liff/link?t={invite_token}` へ誘導（招待メール記載の招待URLから改めてアクセスするよう案内）
+   - `not_linked`（初回・未紐付け、またはテナント在籍解除後） → 管理者から共有された招待URL（`/liff/link?t={invite_token}`）から改めてアクセスするよう案内
    - `token_invalid` / `expired` → LIFFエラー画面（再読み込み案内）
 
 `src/app/liff/link/page.tsx` — 招待URL（`/liff/link?t={invite_token}`）からLINEブラウザで開かれる。LIFF初期化→IDトークン取得→`POST /api/line/invite-accept`→成功後は `entry` と同じくセッション確立→`/`へ遷移。
@@ -184,17 +186,34 @@ LINE経由の自動作成アカウントはパスワード未設定のため、�
 ```
 LINE_CHANNEL_SECRET=
 LINE_CHANNEL_ACCESS_TOKEN=
-LIFF_ID=
+LINE_LOGIN_CHANNEL_ID=
+NEXT_PUBLIC_LIFF_ID=
 ```
+
+`LINE_LOGIN_CHANNEL_ID`（サーバー専用、IDトークンの`aud`検証用）と`NEXT_PUBLIC_LIFF_ID`（クライアント公開、`liff.init()`専用）は別物。混同しないこと。
 
 ## 追加が必要な依存パッケージ
 
 - `jose`（LINEのIDトークン検証・JWKS取得・署名検証用）
+- `@line/liff`（LIFF SDK。フロントエンドで`liff.init()`・`liff.login()`・`liff.getIDToken()`に使用）
+
+## LIFFアプリのエンドポイントURL設定（LINE Developersコンソール）
+
+LIFFの`redirectUri`（`liff.login()`が内部で使う）は、LIFFアプリに設定した「エンドポイントURL」配下のパスにしか遷移できない。`/liff/entry`と`/liff/link`の両方を使うため、エンドポイントURLは個別ページ（例: `https://<domain>/liff/entry`）ではなく、両方を包含する`https://<domain>/liff`に設定すること。
 
 ## 未確定事項（実装前に確認すること）
 
 - Supabase標準のメール送信（`resetPasswordForEmail` / 招待メール）は送信数に制限があるため、本番運用前に独自SMTP/Resend等への切り替えが必要かどうかは別途確認する
 - `tenant_member_invites.role` に `developer` を含めない制約は、DBのcheck制約とAPI側のバリデーション両方で担保すること
+
+## 実装後の修正履歴（最終レビューで判明）
+
+実装完了後の最終レビューで、以下の設計不備が判明し修正した。
+
+1. **`aud`検証の取り違え**: 上記「重要な注意」の通り、`NEXT_PUBLIC_LIFF_ID`をIDトークンの`aud`検証に使う設計だったが、LINEのIDトークンの`aud`はLINEログインチャネルIDでありLIFF IDとは異なる。`LINE_LOGIN_CHANNEL_ID`を新設して分離した。
+2. **`line_friends`のブロック解除デッドロック**: LINE公式アカウントを一度ブロック（`unfollow`）した友だちが再度友だち追加（再`follow`）しても、`status`が`'blocked'`のまま復元されず、二度と`liff-auth`を通過できなくなる導線がなかった。Webhookの`follow`ハンドラで、既存行が`'blocked'`の場合は`user_id`の有無に応じて`'linked'`または`'unlinked'`に復元するよう修正した。
+3. **テナント脱退後もLINE経由の自動ログインが有効なままだった**: `liff-auth`は`line_friends.status==='linked'`のみで判定しており、`tenant_members`からの除籍を見ていなかった。`liff-auth`に`tenant_members`在籍確認を追加した。
+4. **招待導線の文言が実態と不一致**: 「招待メールのリンクから」という案内文言があったが、実際には招待メール送信機能は実装しておらず、管理者が`inviteUrl`を手動で共有する設計。文言を実態に合わせて修正した。
 
 ## スコープ外（今回実装しない）
 
