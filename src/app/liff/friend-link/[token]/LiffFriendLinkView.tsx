@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 
-type FriendLinkState = "loading" | "error" | "expired" | "already_used";
+type FriendLinkState = "loading" | "done" | "missing_token" | "error" | "expired" | "already_used";
 
-const ERROR_MESSAGES: Record<Exclude<FriendLinkState, "loading">, string> = {
+const ERROR_MESSAGES: Record<Exclude<FriendLinkState, "loading" | "done">, string> = {
+  missing_token: "招待リンクが正しくありません。",
   error: "連携に失敗しました。もう一度お試しください。",
   expired: "招待の有効期限が切れています。管理者に再発行を依頼してください。",
   already_used: "この招待は既に使用されています。",
@@ -18,6 +19,11 @@ export function LiffFriendLinkView({ inviteToken }: LiffFriendLinkViewProps) {
   const [state, setState] = useState<FriendLinkState>("loading");
 
   useEffect(() => {
+    if (!inviteToken) {
+      setState("missing_token");
+      return;
+    }
+
     let cancelled = false;
 
     async function run() {
@@ -44,7 +50,7 @@ export function LiffFriendLinkView({ inviteToken }: LiffFriendLinkViewProps) {
         });
 
         if (res.ok) {
-          window.location.assign("/");
+          if (!cancelled) setState("done");
           return;
         }
 
@@ -67,6 +73,10 @@ export function LiffFriendLinkView({ inviteToken }: LiffFriendLinkViewProps) {
 
   if (state === "loading") {
     return <p className="p-6 text-center text-sm text-ink-soft">読み込み中...</p>;
+  }
+
+  if (state === "done") {
+    return <p className="p-6 text-center text-sm text-ink-soft">連携が完了しました。今後はLINEのリッチメニューからdx-sensorにアクセスできます。</p>;
   }
 
   return <p className="p-6 text-center text-sm text-alert">{ERROR_MESSAGES[state]}</p>;
