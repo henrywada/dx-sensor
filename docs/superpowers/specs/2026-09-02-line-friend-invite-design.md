@@ -183,3 +183,21 @@ EMAIL_FROM=
 6. LIFF側ページ（`/liff/friend-link/[token]`）と紐付けAPI（`POST /api/line/friend-link-accept`）
 7. メール送信画面（`(tenant)/members/friend-invites`）のUI実装
 8. 動作確認（Resend送信確認、QR表示、実機でのスキャン→紐付け完了確認）
+
+## 実装後の修正履歴（最終レビューで判明）
+
+実装完了後の最終ホールブランチレビューで、以下の設計不備が判明し修正した。
+
+1. **QRコードのLIFF URLが存在しないルートに解決していた**: 当初の設計（本ドキュメント上部の「QRコードの中身」）は`https://liff.line.me/<LIFF_ID>?t=<token>`（クエリのみ、パスセグメント無し）だったが、LINEのLIFF URL解決は「liffIdの後に続くパス＋クエリをそのままエンドポイントURLに転送する」仕様のため、この形式は`https://<domain>/liff?t=<token>`に解決され、`/liff/page.tsx`が存在せず404になる。既存のリッチメニューURI（`https://liff.line.me/{LIFF_ID}`、パス無し）と同じ理由で見落とされていた。修正: QRコードは`https://liff.line.me/<LIFF_ID>/friend-link/<token>`（トークンをパスセグメントとして付与）を符号化するよう変更した。`/liff/friend-link/[token]`という既存のルート構造とはこれで整合する。
+2. **友だち紐付けAPIのトークン消費が非アトミックだった**: `line_friend_invites.used_at`の更新が書き込み結果を確認しない実装だったため、同時アクセスでの二重使用（TOCTOU）や、書き込み失敗時にトークンが使い切りにならない問題があった。`.is("used_at", null)`条件付きの原子的な更新に変更し、更新0件を「使用済み」として扱うようにした。
+3. **既存のLINEアカウントを別の既存ユーザーに無断で付け替えられるリスクがあった**: `line_friends`のupsertが`line_user_id`の一致だけで`user_id`を無条件に上書きしていたため、既に別アカウントに紐付いているLINEユーザーが「他人宛の招待」のQRをスキャンすると、そのLINEアカウントが黙って別ユーザーに再紐付けされてしまう（アカウント乗っ取りの温床）。upsert前に既存の`line_friends`行を確認し、`user_id`が招待対象と異なる場合は`token_invalid`として拒否するよう修正した。
+4. **QRコード表示ページのキャッシュ**: `service_role`でDBを読むだけのServer Componentで動的レンダリングの明示が無く、Next.jsが「使用済み/期限切れ」判定をキャッシュしてしまうリスクがあった。`export const dynamic = "force-dynamic"`を追加した。
+5. **メール送信画面がAPI失敗時に何も表示しない**: `POST /api/tenant-members/friend-invites`が非2xxを返した場合、`results`が無いため画面が無反応に見える不具合があった。エラー表示とtry/catchを追加した。
+6. **LIFF側ページの`params`型がインストール済みNext.jsのバージョンと不整合**: Next.js 15形式（`Promise<{token}>`）で書かれていたが、実際にインストールされているのはNext.js 14.2.35で`params`は同期オブジェクト。今日は偶然動作するが将来のアップグレードで壊れるため、同期形式に統一した。
+
+### 既知の残課題（今回のスコープ外・要フォローアップ）
+
+- `/members/friend-invites`へのナビゲーションリンクがどこにも無く、URLを直接入力しないと到達できない。どこに配置するか（ヘッダー、ダッシュボード等）は製品判断が必要なため、今回のスコープには含めなかった。
+- 招待トークンの原子的な使用済みマーカーが、なりすまし拒否チェックより先に走るため、他人宛の招待を（既に別アカウントに紐付いた）LINEアカウントでスキャンすると、拒否はされるがそのトークン自体は使用済みになり、本来の受信者が使えなくなる（軽微なDoS）。悪用例は限定的だが、気になる場合は招待の再発行で対応可能。
+- メールHTML本文の`tenantName`はエスケープしていない（テナント管理者は自テナント宛のメールにしか影響できないため実害は限定的）。
+- `friendInviteCandidates.ts`のメールアドレス解決ロジックは`src/lib/admin/members.ts`の`listAuthEmailMap`と類似の実装だが、意図的に別ファイルとして分離した（開発者専用の`src/lib/admin/`とテナント向け機能を疎結合に保つため）。
