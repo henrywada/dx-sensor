@@ -4,8 +4,7 @@ import { useEffect, useState } from "react";
 
 type FriendLinkState = "loading" | "error" | "expired" | "already_used";
 
-const ERROR_MESSAGES: Record<FriendLinkState, string> = {
-  loading: "読み込み中...",
+const ERROR_MESSAGES: Record<Exclude<FriendLinkState, "loading">, string> = {
   error: "連携に失敗しました。もう一度お試しください。",
   expired: "招待の有効期限が切れています。管理者に再発行を依頼してください。",
   already_used: "この招待は既に使用されています。",
@@ -66,9 +65,9 @@ export function LiffFriendLinkView({ inviteToken }: LiffFriendLinkViewProps) {
     };
   }, [inviteToken]);
 
-  return (
-    <p className="p-6 text-center text-sm text-ink-soft">
-      {state === "loading" ? ERROR_MESSAGES[state] : <span className="text-alert">{ERROR_MESSAGES[state]}</span>}
-    </p>
-  );
+  if (state === "loading") {
+    return <p className="p-6 text-center text-sm text-ink-soft">読み込み中...</p>;
+  }
+
+  return <p className="p-6 text-center text-sm text-alert">{ERROR_MESSAGES[state]}</p>;
 }
