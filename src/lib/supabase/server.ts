@@ -33,6 +33,9 @@ export function createServerSupabase() {
  *  - server-side jobs that write vehicle_events on behalf of the system
  *  - LINE連携の認証フロー(api/line/webhook, api/line/invite-accept, api/line/liff-auth) —
  *    line_friends/tenant_member_invitesの読み書きとauth.users作成にservice_roleが必要なため
+ *  - LINE友だち招待機能(api/tenant-members/friend-invites, api/line/friend-link-accept,
+ *    /line-friend-invite/[token]) — line_friend_invites/line_friendsの読み書きと
+ *    対象メンバーのメールアドレス解決にservice_roleが必要なため
  * Never expose this client or its key to the browser.
  */
 export function createServiceSupabase() {
