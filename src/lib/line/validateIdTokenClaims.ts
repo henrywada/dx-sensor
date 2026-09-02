@@ -9,12 +9,12 @@ const LINE_ISSUER = "https://access.line.me";
 
 export function validateLineIdTokenClaims(
   claims: LineIdTokenClaims,
-  params: { liffChannelId: string; nowSeconds: number }
+  params: { channelId: string; nowSeconds: number }
 ): { lineUserId: string } {
   if (claims.iss !== LINE_ISSUER) {
     throw new Error("invalid issuer");
   }
-  if (claims.aud !== params.liffChannelId) {
+  if (claims.aud !== params.channelId) {
     throw new Error("invalid audience");
   }
   if (claims.exp <= params.nowSeconds) {

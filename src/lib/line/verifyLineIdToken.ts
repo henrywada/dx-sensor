@@ -15,19 +15,23 @@ function getJwks() {
 
 export async function verifyLineIdToken(
   idToken: string,
-  liffChannelId: string
+  channelId: string
 ): Promise<{ lineUserId: string }> {
   const { payload } = await jwtVerify(idToken, getJwks(), {
     issuer: LINE_ISSUER,
-    audience: liffChannelId,
+    audience: channelId,
   });
 
-  if (typeof payload.sub !== "string" || typeof payload.exp !== "number") {
+  if (
+    typeof payload.sub !== "string" ||
+    typeof payload.exp !== "number" ||
+    typeof payload.aud !== "string"
+  ) {
     throw new Error("invalid token payload");
   }
 
   return validateLineIdTokenClaims(
-    { sub: payload.sub, aud: liffChannelId, iss: LINE_ISSUER, exp: payload.exp },
-    { liffChannelId, nowSeconds: Math.floor(Date.now() / 1000) }
+    { sub: payload.sub, aud: payload.aud, iss: LINE_ISSUER, exp: payload.exp },
+    { channelId, nowSeconds: Math.floor(Date.now() / 1000) }
   );
 }

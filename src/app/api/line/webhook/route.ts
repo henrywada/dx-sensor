@@ -41,7 +41,7 @@ export async function POST(req: Request) {
     if (event.type === "follow") {
       const { data: existing } = await supabase
         .from("line_friends")
-        .select("id")
+        .select("id, status, user_id")
         .eq("line_user_id", event.source.userId)
         .maybeSingle();
 
@@ -50,6 +50,11 @@ export async function POST(req: Request) {
           line_user_id: event.source.userId,
           status: "unlinked",
         });
+      } else if (existing.status === "blocked") {
+        await supabase
+          .from("line_friends")
+          .update({ status: existing.user_id ? "linked" : "unlinked" })
+          .eq("id", existing.id);
       }
 
       try {

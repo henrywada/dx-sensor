@@ -61,7 +61,7 @@ export function LiffEntryView() {
     return (
       <div className="space-y-2 p-6 text-center text-sm text-ink-soft">
         <p>まだアカウントが連携されていません。</p>
-        <p>管理者から届いた招待メールのリンクからアクセスしてください。</p>
+        <p>管理者から共有された招待用リンクからアクセスしてください。</p>
       </div>
     );
   }

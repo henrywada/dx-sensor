@@ -6,9 +6,9 @@ import { createServerSupabase, createServiceSupabase } from "@/lib/supabase/serv
 import { parseInviteAcceptBody } from "./parseBody";
 
 export async function POST(req: Request) {
-  const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
-  if (!liffId) {
-    console.error("NEXT_PUBLIC_LIFF_ID is not configured");
+  const channelId = process.env.LINE_LOGIN_CHANNEL_ID;
+  if (!channelId) {
+    console.error("LINE_LOGIN_CHANNEL_ID is not configured");
     return NextResponse.json({ error: "server misconfigured" }, { status: 500 });
   }
 
@@ -21,7 +21,7 @@ export async function POST(req: Request) {
 
   let lineUserId: string;
   try {
-    ({ lineUserId } = await verifyLineIdToken(parsed.idToken, liffId));
+    ({ lineUserId } = await verifyLineIdToken(parsed.idToken, channelId));
   } catch {
     return NextResponse.json({ error: "token_invalid" }, { status: 401 });
   }
