@@ -37,7 +37,7 @@ export function AppCard({ icon: Icon, eyebrow, title, description, href, badge }
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-signal-soft text-signal">
           <Icon className="h-4.5 w-4.5" strokeWidth={1.75} />
         </span>
-        <h3 className="min-w-0 flex-1 text-base font-bold text-[#196B24]">{title}</h3>
+        <h3 className="min-w-0 flex-1 text-base font-bold text-[#0F4A18]">{title}</h3>
         {!disabled && (
           <span className="ml-auto flex shrink-0 items-center gap-1 text-sm font-medium text-signal">
             進む
