@@ -1,6 +1,8 @@
 import { buildFriendInviteLiffUrl, generateFriendInviteQrDataUrl } from "@/lib/line/friendInviteQrCode";
 import { createServiceSupabase } from "@/lib/supabase/server";
 
+export const dynamic = "force-dynamic";
+
 function ErrorNotice({ message }: { message: string }) {
   return (
     <div className="mx-auto max-w-md p-6 text-sm text-ink">

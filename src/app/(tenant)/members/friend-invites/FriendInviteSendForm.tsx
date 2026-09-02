@@ -13,6 +13,7 @@ export function FriendInviteSendForm({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [sending, setSending] = useState(false);
   const [results, setResults] = useState<SendResult[] | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   function toggle(userId: string) {
     setSelected((prev) => {
@@ -27,6 +28,7 @@ export function FriendInviteSendForm({
     if (selected.size === 0) return;
     setSending(true);
     setResults(null);
+    setSendError(null);
     try {
       const res = await fetch("/api/tenant-members/friend-invites", {
         method: "POST",
@@ -34,7 +36,13 @@ export function FriendInviteSendForm({
         body: JSON.stringify({ userIds: [...selected] }),
       });
       const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSendError(typeof body.error === "string" ? body.error : "送信に失敗しました。");
+        return;
+      }
       setResults(body.results ?? []);
+    } catch {
+      setSendError("送信に失敗しました。通信環境を確認してください。");
     } finally {
       setSending(false);
     }
@@ -67,6 +75,8 @@ export function FriendInviteSendForm({
       >
         {sending ? "送信中..." : "友だち招待の送信"}
       </button>
+
+      {sendError && <p className="text-sm text-alert">{sendError}</p>}
 
       {results && (
         <ul className="space-y-1 text-sm">
