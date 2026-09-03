@@ -5,3 +5,4 @@ node_modules/
 .vercel
 *.log
 *:Zone.Identifier
+.worktrees/
