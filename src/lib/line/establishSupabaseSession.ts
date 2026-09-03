@@ -33,6 +33,7 @@ export async function establishSupabaseSession(params: {
 
   const hashedToken = data?.properties?.hashed_token;
   if (error || !hashedToken) {
+    console.error("establishSupabaseSession: generateLink failed", error);
     throw new Error("failed to generate session link");
   }
 
@@ -43,6 +44,7 @@ export async function establishSupabaseSession(params: {
   });
 
   if (verifyError) {
-    throw new Error("failed to verify session link");
+    console.error("establishSupabaseSession: verifyOtp failed", verifyError);
+    throw new Error(`failed to verify session link: ${verifyError.message}`);
   }
 }
