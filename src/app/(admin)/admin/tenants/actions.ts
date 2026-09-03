@@ -45,6 +45,7 @@ export async function createTenantAction(input: {
     name,
     slug,
     is_premium: Boolean(input.isPremium),
+    tenant_type: input.isPremium ? "premium" : "free",
   });
 
   if (error) {
@@ -89,6 +90,7 @@ export async function updateTenantAction(input: {
       name,
       slug,
       is_premium: Boolean(input.isPremium),
+      tenant_type: input.isPremium ? "premium" : "free",
     })
     .eq("id", tenantId)
     .select("id");

@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 type CallbackState = "loading" | "error";
+type ProvisionResponse = { redirectTo?: string; inviteUrl?: string };
 
 export default function SignupCallbackPage() {
   const [state, setState] = useState<CallbackState>("loading");
@@ -28,7 +29,7 @@ export default function SignupCallbackPage() {
 
       try {
         const res = await fetch("/api/signup/provision", { method: "POST" });
-        const body = await res.json().catch(() => ({}));
+        const body: ProvisionResponse = await res.json().catch(() => ({}));
 
         if (!res.ok) {
           if (!cancelled) setState("error");

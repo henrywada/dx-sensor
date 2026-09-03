@@ -4,7 +4,7 @@
 -- 3値を持つtenant_typeを新設する。is_premium列は当面残す（撤去は別タスク）。
 
 alter table tenants
-  add column tenant_type text not null default 'free'
+  add column if not exists tenant_type text not null default 'free'
   check (tenant_type in ('free', 'premium', 'company'));
 
 update tenants set tenant_type = 'premium' where is_premium = true;

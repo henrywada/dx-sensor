@@ -46,6 +46,8 @@ export function SignupForm() {
           {sent ? (
             <p className="text-sm text-[#11521A]">
               メールを送信しました。届いたリンクを開いて登録を完了してください。
+              <br />
+              ※ 登録に使用したのと同じ端末・ブラウザでリンクを開いてください。
             </p>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">

@@ -36,6 +36,8 @@ export function createServerSupabase() {
  *  - LINE友だち招待機能(api/tenant-members/friend-invites, api/line/friend-link-accept,
  *    /line-friend-invite/[token]) — line_friend_invites/line_friendsの読み書きと
  *    対象メンバーのメールアドレス解決にservice_roleが必要なため
+ *  - api/signup/provision — セルフサインアップ時のtenants/tenant_members作成に
+ *    service_roleが必要なため（authenticatedロールはtenantsへのinsertを許可されていない）
  * Never expose this client or its key to the browser.
  */
 export function createServiceSupabase() {

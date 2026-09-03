@@ -25,4 +25,9 @@ describe("buildSignupTenantIdentity", () => {
     const b = buildSignupTenantIdentity("taro@example.com", USER_ID_B);
     expect(a.slug).not.toBe(b.slug);
   });
+
+  it("uses the full de-hyphenated userId as the slug suffix", () => {
+    const { slug } = buildSignupTenantIdentity("taro@example.com", USER_ID_A);
+    expect(slug.endsWith(USER_ID_A.replace(/-/g, ""))).toBe(true);
+  });
 });
