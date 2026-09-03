@@ -14,7 +14,6 @@ type VerifyOtpClient = {
     verifyOtp: (params: {
       type: "magiclink";
       token_hash: string;
-      email: string;
     }) => Promise<{ error: { message: string } | null }>;
   };
 };
@@ -40,7 +39,6 @@ export async function establishSupabaseSession(params: {
   const { error: verifyError } = await sessionClient.auth.verifyOtp({
     type: "magiclink",
     token_hash: hashedToken,
-    email,
   });
 
   if (verifyError) {

@@ -19,10 +19,11 @@ describe("establishSupabaseSession", () => {
       type: "magiclink",
       email: "user@example.com",
     });
+    // Supabaseのverify OtpはtokenHashを使う場合、type/token_hash以外を
+    // 渡すとAuthApiError("Only the token_hash and type should be provided")になる
     expect(verifyOtp).toHaveBeenCalledWith({
       type: "magiclink",
       token_hash: "hashed-token-123",
-      email: "user@example.com",
     });
   });
 
