@@ -7,7 +7,11 @@ import type { ActiveTenant } from "@/lib/auth/getActiveTenant";
 interface AppHeaderProps {
   variant: "tenant" | "admin";
   isDeveloper?: boolean;
-  tenantRole?: ActiveTenant["role"];
+  // ActiveTenant["role"] doesn't (yet) include "admin_tenant" in this
+  // branch's committed baseline; widened locally so the admin_tenant nav
+  // check below type-checks without touching the shared interface (which
+  // has unrelated, currently-uncommitted, in-flight changes on main).
+  tenantRole?: ActiveTenant["role"] | "admin_tenant";
   email?: string | null;
 }
 
