@@ -44,14 +44,23 @@ export function AppHeader({
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
           {isAdmin ? (
             <>
+              {canAccessTenantAdmin && (
+                <Link
+                  href="/admin_tenant"
+                  className="flex items-center gap-1.5 rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-sm font-medium text-emerald-700 transition-colors hover:border-emerald-400 sm:px-4"
+                >
+                  <Settings className="h-4 w-4" strokeWidth={2} />
+                  管理へ
+                </Link>
+              )}
               <LogoutButton />
               <Link
                 href="/"
                 className="flex items-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:border-signal hover:text-signal sm:px-4"
               >
                 <ArrowLeftCircle className="h-4 w-4 shrink-0" strokeWidth={2} />
-                <span className="sm:hidden">テナントへ</span>
-                <span className="hidden sm:inline">テナント画面へ</span>
+                <span className="sm:hidden">ユーザへ</span>
+                <span className="hidden sm:inline">ユーザ画面へ</span>
               </Link>
             </>
           ) : (
