@@ -1,16 +1,12 @@
 import { NextResponse } from "next/server";
-import { buildFollowReplyMessage } from "@/lib/line/buildFollowReplyMessage";
-import { replyLineMessage } from "@/lib/line/lineMessagingClient";
 import { parseWebhookEvents } from "@/lib/line/parseWebhookEvents";
 import { verifyLineWebhookSignature } from "@/lib/line/verifyWebhookSignature";
 import { createServiceSupabase } from "@/lib/supabase/server";
 
 export async function POST(req: Request) {
   const channelSecret = process.env.LINE_CHANNEL_SECRET;
-  const channelAccessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
-  const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
 
-  if (!channelSecret || !channelAccessToken || !liffId) {
+  if (!channelSecret) {
     console.error("LINE env vars are not configured");
     return NextResponse.json({ error: "server misconfigured" }, { status: 500 });
   }
@@ -56,16 +52,9 @@ export async function POST(req: Request) {
           .update({ status: existing.user_id ? "linked" : "unlinked" })
           .eq("id", existing.id);
       }
-
-      try {
-        await replyLineMessage({
-          channelAccessToken,
-          replyToken: event.replyToken,
-          messages: buildFollowReplyMessage(liffId),
-        });
-      } catch (replyError) {
-        console.error("failed to send LINE follow reply", replyError);
-      }
+      // 友だち追加時の案内メッセージはLINE公式アカウント側の
+      // 「あいさつメッセージ」機能が送信するため、ここでは送信しない
+      // (Webhookのreply APIと同じreplyTokenを取り合い、競合していたため)
     } else if (event.type === "unfollow") {
       await supabase
         .from("line_friends")
