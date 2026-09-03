@@ -1,4 +1,9 @@
-export type DocumentActorRole = "owner" | "admin" | "viewer" | "developer";
+export type DocumentActorRole =
+  | "owner"
+  | "admin"
+  | "viewer"
+  | "developer"
+  | "admin_tenant";
 
 export function canMutateDocument({
   actorUserId,

@@ -1,4 +1,10 @@
-export const MEMBER_ROLES = ["owner", "admin", "viewer", "developer"] as const;
+export const MEMBER_ROLES = [
+  "owner",
+  "admin",
+  "viewer",
+  "developer",
+  "admin_tenant",
+] as const;
 export type MemberRole = (typeof MEMBER_ROLES)[number];
 
 export type TenantOption = {

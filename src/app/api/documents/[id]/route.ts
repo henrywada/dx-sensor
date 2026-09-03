@@ -81,7 +81,10 @@ type PatchBody = {
 
 type PreparedRequest = {
   viewer: { userId: string; isDeveloper: boolean };
-  tenant: { tenantId: string; role: "owner" | "admin" | "viewer" | "developer" };
+  tenant: {
+    tenantId: string;
+    role: "owner" | "admin" | "viewer" | "developer" | "admin_tenant";
+  };
   supabase: ReturnType<typeof createServerSupabase>;
   row: DocumentRow;
   images: ImageRow[];
@@ -195,7 +198,7 @@ async function removePathsStrict(
 function canMutate(
   row: DocumentRow,
   viewer: { userId: string; isDeveloper: boolean },
-  role: "owner" | "admin" | "viewer" | "developer"
+  role: "owner" | "admin" | "viewer" | "developer" | "admin_tenant"
 ) {
   return canMutateDocument({
     actorUserId: viewer.userId,

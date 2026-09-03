@@ -2,7 +2,7 @@ import { createServerSupabase } from "@/lib/supabase/server";
 
 export interface ActiveTenant {
   tenantId: string;
-  role: "owner" | "admin" | "viewer" | "developer";
+  role: "owner" | "admin" | "viewer" | "developer" | "admin_tenant";
 }
 
 /**

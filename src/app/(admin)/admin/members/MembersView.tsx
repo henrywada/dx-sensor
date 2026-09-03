@@ -19,6 +19,7 @@ const ROLE_LABELS: Record<MemberRole, string> = {
   admin: "admin（管理者）",
   viewer: "viewer（閲覧）",
   developer: "developer（開発者）",
+  admin_tenant: "admin_tenant（テナント管理画面）",
 };
 
 type Props = {

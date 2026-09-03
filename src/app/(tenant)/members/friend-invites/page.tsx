@@ -4,7 +4,7 @@ import { getViewerContext } from "@/lib/auth/getViewerContext";
 import { listFriendInviteCandidates } from "@/lib/line/friendInviteCandidates";
 import { FriendInviteSendForm } from "./FriendInviteSendForm";
 
-const ALLOWED_ROLES = new Set(["owner", "admin", "developer"]);
+const ALLOWED_ROLES = new Set(["owner", "admin", "developer", "admin_tenant"]);
 
 export default async function FriendInvitesPage() {
   const viewer = await getViewerContext();
