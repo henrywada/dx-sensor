@@ -8,7 +8,7 @@ import { generateInviteToken, inviteExpiryDate } from "@/lib/line/inviteToken";
 import { createServerSupabase, createServiceSupabase } from "@/lib/supabase/server";
 import { parseFriendInviteBody } from "./parseBody";
 
-const ADMIN_ROLES = new Set(["owner", "admin", "developer"]);
+const ADMIN_ROLES = new Set(["owner", "admin", "developer", "admin_tenant"]);
 
 type SendResult = { userId: string; ok: boolean; error?: string };
 

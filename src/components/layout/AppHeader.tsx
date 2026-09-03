@@ -1,11 +1,13 @@
 import Link from "next/link";
-import { ShieldCheck, ArrowLeftCircle } from "lucide-react";
+import { ShieldCheck, Settings, ArrowLeftCircle } from "lucide-react";
 import { LogoMark } from "@/components/ui/LogoMark";
 import { LogoutButton } from "@/components/layout/LogoutButton";
+import type { ActiveTenant } from "@/lib/auth/getActiveTenant";
 
 interface AppHeaderProps {
   variant: "tenant" | "admin";
   isDeveloper?: boolean;
+  tenantRole?: ActiveTenant["role"];
   email?: string | null;
 }
 
@@ -16,8 +18,14 @@ interface AppHeaderProps {
  * living in two places that had to be kept in sync manually). Now there
  * is exactly one place that defines the header.
  */
-export function AppHeader({ variant, isDeveloper = false, email = null }: AppHeaderProps) {
+export function AppHeader({
+  variant,
+  isDeveloper = false,
+  tenantRole,
+  email = null,
+}: AppHeaderProps) {
   const isAdmin = variant === "admin";
+  const canAccessTenantAdmin = isDeveloper || tenantRole === "admin_tenant";
 
   return (
     <header className="border-b border-line bg-paper">
@@ -44,13 +52,22 @@ export function AppHeader({ variant, isDeveloper = false, email = null }: AppHea
             </>
           ) : (
             <>
+              {canAccessTenantAdmin && (
+                <Link
+                  href="/admin_tenant"
+                  className="flex items-center gap-1.5 rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-sm font-medium text-emerald-700 transition-colors hover:border-emerald-400 sm:px-4"
+                >
+                  <Settings className="h-4 w-4" strokeWidth={2} />
+                  管理へ
+                </Link>
+              )}
               {isDeveloper && (
                 <Link
                   href="/admin"
                   className="flex items-center gap-1.5 rounded-full border border-alert/40 bg-alert-soft px-4 py-1.5 text-sm font-medium text-alert transition-colors hover:border-alert"
                 >
                   <ShieldCheck className="h-4 w-4" strokeWidth={2} />
-                  管理へ
+                  開発管理へ
                 </Link>
               )}
               {email && <span className="hidden font-en text-xs text-ink-soft sm:inline">{email}</span>}
