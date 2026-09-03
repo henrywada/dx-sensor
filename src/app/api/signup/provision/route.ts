@@ -42,7 +42,13 @@ export async function POST() {
 
     if (memberError) {
       console.error("signup/provision: tenant_members insert failed", memberError);
-      await service.from("tenants").delete().eq("id", tenant.id);
+      const { error: rollbackError } = await service
+        .from("tenants")
+        .delete()
+        .eq("id", tenant.id);
+      if (rollbackError) {
+        console.error("signup/provision: tenant rollback delete failed", rollbackError);
+      }
       return NextResponse.json({ error: "member_creation_failed" }, { status: 500 });
     }
 
