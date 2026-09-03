@@ -13,6 +13,10 @@ interface AppHeaderProps {
   // has unrelated, currently-uncommitted, in-flight changes on main).
   tenantRole?: ActiveTenant["role"] | "admin_tenant";
   email?: string | null;
+  // LINEアプリ内蔵ブラウザ(LIFF)経由のアクセスではログアウトボタンを隠す。
+  // ログアウトしてもLINE側のログイン状態は残り続けるため実害はないが、
+  // LINEユーザーにメール/パスワードのログイン画面が突然出る不自然な体験になるため。
+  hideLogoutButton?: boolean;
 }
 
 /**
@@ -27,6 +31,7 @@ export function AppHeader({
   isDeveloper = false,
   tenantRole,
   email = null,
+  hideLogoutButton = false,
 }: AppHeaderProps) {
   const isAdmin = variant === "admin";
   const canAccessTenantAdmin = isDeveloper || tenantRole === "admin_tenant";
@@ -53,7 +58,7 @@ export function AppHeader({
                   管理へ
                 </Link>
               )}
-              <LogoutButton />
+              {!hideLogoutButton && <LogoutButton />}
               <Link
                 href="/"
                 className="flex items-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:border-signal hover:text-signal sm:px-4"
@@ -84,7 +89,7 @@ export function AppHeader({
                 </Link>
               )}
               {email && <span className="hidden font-en text-xs text-ink-soft sm:inline">{email}</span>}
-              <LogoutButton />
+              {!hideLogoutButton && <LogoutButton />}
             </>
           )}
         </div>
