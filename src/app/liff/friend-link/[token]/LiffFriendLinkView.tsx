@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ensureFriendship } from "@/lib/line/ensureFriendship";
 
 type FriendLinkState = "loading" | "done" | "missing_token" | "error" | "expired" | "already_used";
 
@@ -36,6 +37,12 @@ export function LiffFriendLinkView({ inviteToken }: LiffFriendLinkViewProps) {
           liff.login();
           return;
         }
+
+        // LINEアプリ内のLIFFブラウザは最初からログイン済み扱いになり
+        // liff.login()の認可フローを経由しないため、LIFFアプリ設定の
+        // 「友だち追加オプション」による自動プロンプトが発火しない。
+        // ここで明示的にフォロー状態を確認し、未フォローなら促す。
+        await ensureFriendship(liff);
 
         const idToken = liff.getIDToken();
         if (!idToken) {
