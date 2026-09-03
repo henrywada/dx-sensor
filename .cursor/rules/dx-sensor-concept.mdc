@@ -22,9 +22,30 @@ dx-sensorは「定点観測した画像を時系列で比較し、変化をAIで
 - 開発: Tapo / 本番: Reolink。両者とも標準ONVIF呼び出しのみに依存し、ベンダー独自APIに依存しない。
 - ベンダー切り替えは `cameras.vendor` カラムの変更のみで完結させる。
 
+## 契約形態・テナント種別・契約動線（2026-09-03確定）
+
+### 契約形態（2種類）
+1. **個人契約**: 個人ユーザーが契約。テナントは「Free」または「Premium」。
+2. **テナント契約（会社契約）**: 会社単位で契約。テナント内でデータ集計・共有。
+
+### テナント種別（3種類）
+1. **Free**: 個人の無料プランユーザーのテナント
+2. **Premium**: 個人の有料プランユーザーのテナント
+3. **会社テナント**: 会社ごとに契約し従業員（ユーザー）を登録するテナント
+
+### 契約動線
+1. Free/Premium: LPで料金プラン選択 → (有料なら)Stripe決済(後日開発) → ユーザー登録+認証メール → 認証後LINE友だち招待QR表示
+2. 会社契約: LPで料金プラン選択 → Stripe決済(後日開発) → 管理者としてユーザー登録+認証メール → 認証後LINE友だち招待QR表示 → 管理者が従業員を登録し `/members/friend-invites` でLINE招待
+
+### 確定した設計方針
+- テナント種別は`tenants.tenant_type`（'free'|'premium'|'company'等、新設予定）で区別する。既存`is_premium`との整理は導入時に検討。
+- 会社契約の管理者ロールは`tenant_members.role = 'admin_tenant'`に一本化（owner/adminは使わない）。
+- 決済(Stripe等)は個人・会社契約とも現時点でスコープ外（後日開発）。
+
 ## RLS / マルチテナント
 - 全テナントスコープテーブルは `tenant_id` で隔離し、RLS必須。
-- 権限判定は `tenant_members.role`（owner/admin/viewer/developer）で行う。開発者メールのハードコード禁止。
+- 権限判定は `tenant_members.role`（owner/admin/viewer/developer/admin_tenant）で行う。開発者メールのハードコード禁止。
+- `admin_tenant`は会社契約の管理者専用ロール。owner/admin/viewerの一般階層とは別枠で、`/admin_tenant`配下の画面と関連RLSポリシーにのみ明示的に許可する。
 
 ## 技術スタック
 Next.js (App Router) / TypeScript / Supabase (RLS, Storage, Auth) / Vercel (Cron含む) / ONVIF準拠カメラ
