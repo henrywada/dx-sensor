@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export function SiteFooter({ fullWidth = false }: { fullWidth?: boolean }) {
   return (
     <footer className="border-t border-line bg-paper">
@@ -7,16 +9,16 @@ export function SiteFooter({ fullWidth = false }: { fullWidth?: boolean }) {
         }`}
       >
         <div className="flex gap-4 text-xs text-ink-soft">
-          <a href="#" className="hover:text-ink">
+          <Link href="/privacy" className="hover:text-ink">
             プライバシーポリシー
-          </a>
-          <a href="#" className="hover:text-ink">
+          </Link>
+          <Link href="/terms" className="hover:text-ink">
             利用規約
-          </a>
+          </Link>
         </div>
         <div className="flex items-center gap-3 text-xs text-ink-soft">
           <span>© 2026 dx-sensor. All rights reserved.</span>
-          <span className="font-en text-ink-soft/70">v0.1.59</span>
+          <span className="font-en text-ink-soft/70">v0.1.60</span>
         </div>
       </div>
     </footer>
