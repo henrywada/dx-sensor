@@ -32,6 +32,8 @@ export type MonitorTickResponse = {
 export type MonitorCapture = {
   id: string;
   storagePath: string;
+  /** 差分計算・一覧表示用の低解像度サムネイルのパス。無ければstorage_path（フルサイズ）にフォールバックする。 */
+  thumbnailPath: string | null;
 };
 
 export type DownloadedCapture = {
@@ -144,7 +146,9 @@ export async function runMonitorTick(
     };
   }
 
-  const currSignedUrl = await deps.createSignedUrl(currCapture.storagePath);
+  const currSignedUrl = await deps.createSignedUrl(
+    currCapture.thumbnailPath ?? currCapture.storagePath
+  );
   const currCaptureNo = await deps.getCaptureOrdinal(currCapture.id);
 
   if (!request.prevCaptureId) {
@@ -170,10 +174,13 @@ export async function runMonitorTick(
     throw new MonitorTickError("前回画像が見つかりません", 404);
   }
 
-  const [prevFile, currFile, prevSignedUrl, prevCaptureNo, zones] = await Promise.all([
-    deps.downloadCapture(prevCapture.storagePath),
-    deps.downloadCapture(currCapture.storagePath),
-    deps.createSignedUrl(prevCapture.storagePath),
+  // 差分判定(diffScore)は毎tick必ず実行されるため、Storage egressを抑えるため
+  // 低解像度サムネイル（無ければフルサイズにフォールバック）でダウンロードする。
+  // フルサイズは、実際にGemini解析まで進む場合（minor/notify）だけ別途取得する。
+  const [prevDiffFile, currDiffFile, prevSignedUrl, prevCaptureNo, zones] = await Promise.all([
+    deps.downloadCapture(prevCapture.thumbnailPath ?? prevCapture.storagePath),
+    deps.downloadCapture(currCapture.thumbnailPath ?? currCapture.storagePath),
+    deps.createSignedUrl(prevCapture.thumbnailPath ?? prevCapture.storagePath),
     deps.getCaptureOrdinal(prevCapture.id),
     deps.getZones(),
   ]);
@@ -182,15 +189,12 @@ export async function runMonitorTick(
   // 切り出した画像で行う(背景ノイズを除外し検知精度を上げるため)。
   // ゾーンが無い場合は従来通り全体画像で解析する。
   const cropToZones = deps.cropToZones ?? buildZoneComposite;
-  const prevForAnalysis =
-    zones.length > 0 ? await cropToZones(prevFile.buffer, zones) : prevFile.buffer;
-  const currForAnalysis =
-    zones.length > 0 ? await cropToZones(currFile.buffer, zones) : currFile.buffer;
+  const prevForDiff =
+    zones.length > 0 ? await cropToZones(prevDiffFile.buffer, zones) : prevDiffFile.buffer;
+  const currForDiff =
+    zones.length > 0 ? await cropToZones(currDiffFile.buffer, zones) : currDiffFile.buffer;
 
-  const diffScore = await (deps.diffScore ?? frameDiffScore)(
-    prevForAnalysis,
-    currForAnalysis
-  );
+  const diffScore = await (deps.diffScore ?? frameDiffScore)(prevForDiff, currForDiff);
   const severity = classifyDiffScore(diffScore);
 
   if (severity === "skip") {
@@ -214,14 +218,30 @@ export async function runMonitorTick(
       prevCaptureNo,
       currCaptureNo,
       // 削除済みなら署名URLは実体のない壊れたリンクになるため、
-      // 既にダウンロード済みのバイト列をdata URIとして埋め込む。
-      prevSignedUrl: prevDeleted ? toDataUri(prevFile) : prevSignedUrl,
+      // 既にダウンロード済みのバイト列（サムネイル）をdata URIとして埋め込む。
+      prevSignedUrl: prevDeleted ? toDataUri(prevDiffFile) : prevSignedUrl,
       currSignedUrl,
       summary: null,
       eventId,
       message: "変化が小さいため通知対象外です",
     };
   }
+
+  // ここまで来た(minor/notify)場合のみ、AI解析用にフルサイズ画像を取得する。
+  // サムネイルが存在しない場合（旧データ等）は上でダウンロード済みの画像が
+  // 既にフルサイズなので、再ダウンロードせず使い回す。
+  const [prevFullFile, currFullFile] = await Promise.all([
+    prevCapture.thumbnailPath
+      ? deps.downloadCapture(prevCapture.storagePath)
+      : Promise.resolve(prevDiffFile),
+    currCapture.thumbnailPath
+      ? deps.downloadCapture(currCapture.storagePath)
+      : Promise.resolve(currDiffFile),
+  ]);
+  const prevForAnalysis =
+    zones.length > 0 ? await cropToZones(prevFullFile.buffer, zones) : prevFullFile.buffer;
+  const currForAnalysis =
+    zones.length > 0 ? await cropToZones(currFullFile.buffer, zones) : currFullFile.buffer;
 
   const prompt = buildMonitorPrompt({
     title: request.title,
@@ -231,8 +251,8 @@ export async function runMonitorTick(
   // buildZoneComposite(既定のcropToZones)は常にPNGへ再エンコードするため、
   // ゾーン切り出しを行った場合はmimeTypeも"image/png"に揃える
   // (切り出し無しの場合は元画像のmimeTypeのまま)。
-  const prevMimeTypeForAnalysis = zones.length > 0 ? "image/png" : prevFile.mimeType;
-  const currMimeTypeForAnalysis = zones.length > 0 ? "image/png" : currFile.mimeType;
+  const prevMimeTypeForAnalysis = zones.length > 0 ? "image/png" : prevFullFile.mimeType;
+  const currMimeTypeForAnalysis = zones.length > 0 ? "image/png" : currFullFile.mimeType;
   const analysis = await deps.analyzeImages({
     prompt,
     previousImageBuffer: prevForAnalysis,

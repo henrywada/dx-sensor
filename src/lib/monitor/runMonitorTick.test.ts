@@ -61,6 +61,7 @@ describe("runMonitorTick", () => {
       getNextUnprocessedCapture: vi.fn(async () => ({
         id: "curr-capture",
         storagePath: "tenant/day/curr.jpg",
+        thumbnailPath: null,
       })),
     });
 
@@ -88,10 +89,12 @@ describe("runMonitorTick", () => {
       getNextUnprocessedCapture: vi.fn(async () => ({
         id: "curr-capture",
         storagePath: "tenant/day/curr.jpg",
+        thumbnailPath: null,
       })),
       getCaptureById: vi.fn(async () => ({
         id: "prev-capture",
         storagePath: "tenant/day/prev.jpg",
+        thumbnailPath: null,
       })),
       diffScore: vi.fn(async () => 0.01),
       insertChangeEvent: vi.fn(async () => "skip-event-id"),
@@ -131,10 +134,12 @@ describe("runMonitorTick", () => {
       getNextUnprocessedCapture: vi.fn(async () => ({
         id: "curr-capture",
         storagePath: "tenant/day/curr.jpg",
+        thumbnailPath: null,
       })),
       getCaptureById: vi.fn(async () => ({
         id: "prev-capture",
         storagePath: "tenant/day/prev.jpg",
+        thumbnailPath: null,
       })),
       diffScore: vi.fn(async () => 0.01),
       deleteCaptureIfUnreferenced: vi.fn(async () => false),
@@ -153,10 +158,12 @@ describe("runMonitorTick", () => {
       getNextUnprocessedCapture: vi.fn(async () => ({
         id: "curr-capture",
         storagePath: "tenant/day/curr.jpg",
+        thumbnailPath: null,
       })),
       getCaptureById: vi.fn(async () => ({
         id: "prev-capture",
         storagePath: "tenant/day/prev.jpg",
+        thumbnailPath: null,
       })),
       diffScore: vi.fn(async () => 0.05),
       analyzeImages: vi.fn(async () => ({
@@ -193,10 +200,12 @@ describe("runMonitorTick", () => {
       getNextUnprocessedCapture: vi.fn(async () => ({
         id: "curr-capture",
         storagePath: "tenant/day/curr.jpg",
+        thumbnailPath: null,
       })),
       getCaptureById: vi.fn(async () => ({
         id: "prev-capture",
         storagePath: "tenant/day/prev.jpg",
+        thumbnailPath: null,
       })),
       diffScore: vi.fn(async () => 0.08),
       analyzeImages: vi.fn(async () => ({
@@ -253,10 +262,12 @@ describe("runMonitorTick", () => {
       getNextUnprocessedCapture: vi.fn(async () => ({
         id: "curr-capture",
         storagePath: "tenant/day/curr.jpg",
+        thumbnailPath: null,
       })),
       getCaptureById: vi.fn(async () => ({
         id: "prev-capture",
         storagePath: "tenant/day/prev.jpg",
+        thumbnailPath: null,
       })),
       diffScore: vi.fn(async () => 0.0354),
       analyzeImages: vi.fn(async () => ({
@@ -288,10 +299,12 @@ describe("runMonitorTick", () => {
       getNextUnprocessedCapture: vi.fn(async () => ({
         id: "curr-capture",
         storagePath: "tenant/day/curr.jpg",
+        thumbnailPath: null,
       })),
       getCaptureById: vi.fn(async () => ({
         id: "prev-capture",
         storagePath: "tenant/day/prev.jpg",
+        thumbnailPath: null,
       })),
       diffScore: vi.fn(async () => 0.05),
       analyzeImages: vi.fn(async () => ({
@@ -321,10 +334,12 @@ describe("runMonitorTick", () => {
       getNextUnprocessedCapture: vi.fn(async () => ({
         id: "curr-capture",
         storagePath: "tenant/day/curr.jpg",
+        thumbnailPath: null,
       })),
       getCaptureById: vi.fn(async () => ({
         id: "prev-capture",
         storagePath: "tenant/day/prev.jpg",
+        thumbnailPath: null,
       })),
       downloadCapture: vi.fn(async (storagePath: string) => ({
         buffer: Buffer.from(storagePath.includes("prev") ? "prev-image" : "curr-image"),
@@ -356,10 +371,12 @@ describe("runMonitorTick", () => {
       getNextUnprocessedCapture: vi.fn(async () => ({
         id: "curr-capture",
         storagePath: "tenant/day/curr.jpg",
+        thumbnailPath: null,
       })),
       getCaptureById: vi.fn(async () => ({
         id: "prev-capture",
         storagePath: "tenant/day/prev.jpg",
+        thumbnailPath: null,
       })),
       getZones: vi.fn(async () => []),
       cropToZones,
@@ -373,5 +390,131 @@ describe("runMonitorTick", () => {
       Buffer.from("image"),
       Buffer.from("image")
     );
+  });
+
+  it("サムネイルが存在する場合、diff判定はサムネイルのパスでダウンロードする（フルサイズには触れない）", async () => {
+    const downloadCapture = vi.fn(async (storagePath: string) => ({
+      buffer: Buffer.from(storagePath),
+      mimeType: "image/jpeg",
+    }));
+    const deps = createDeps({
+      getNextUnprocessedCapture: vi.fn(async () => ({
+        id: "curr-capture",
+        storagePath: "tenant/day/curr.jpg",
+        thumbnailPath: "tenant/day/curr_thumb.jpg",
+      })),
+      getCaptureById: vi.fn(async () => ({
+        id: "prev-capture",
+        storagePath: "tenant/day/prev.jpg",
+        thumbnailPath: "tenant/day/prev_thumb.jpg",
+      })),
+      downloadCapture,
+      diffScore: vi.fn(async () => 0.01), // skip
+    });
+
+    const result = await runMonitorTick(REQUEST, deps);
+
+    expect(result).toMatchObject({ severity: "skip" });
+    expect(downloadCapture).toHaveBeenCalledWith("tenant/day/prev_thumb.jpg");
+    expect(downloadCapture).toHaveBeenCalledWith("tenant/day/curr_thumb.jpg");
+    expect(downloadCapture).not.toHaveBeenCalledWith("tenant/day/prev.jpg");
+    expect(downloadCapture).not.toHaveBeenCalledWith("tenant/day/curr.jpg");
+    expect(downloadCapture).toHaveBeenCalledTimes(2);
+  });
+
+  it("サムネイルが存在しskip判定の場合、署名URLもサムネイルのパスで発行する", async () => {
+    const createSignedUrl = vi.fn(async (storagePath: string) => `signed:${storagePath}`);
+    const deps = createDeps({
+      getNextUnprocessedCapture: vi.fn(async () => ({
+        id: "curr-capture",
+        storagePath: "tenant/day/curr.jpg",
+        thumbnailPath: "tenant/day/curr_thumb.jpg",
+      })),
+      getCaptureById: vi.fn(async () => ({
+        id: "prev-capture",
+        storagePath: "tenant/day/prev.jpg",
+        thumbnailPath: "tenant/day/prev_thumb.jpg",
+      })),
+      createSignedUrl,
+      diffScore: vi.fn(async () => 0.01), // skip
+    });
+
+    const result = await runMonitorTick(REQUEST, deps);
+
+    expect(result).toMatchObject({
+      prevSignedUrl: "signed:tenant/day/prev_thumb.jpg",
+      currSignedUrl: "signed:tenant/day/curr_thumb.jpg",
+    });
+  });
+
+  it("サムネイルが存在しminor/notify判定に進む場合、Gemini解析にはフルサイズを別途取得して渡す", async () => {
+    const downloadCapture = vi.fn(async (storagePath: string) => ({
+      buffer: Buffer.from(storagePath),
+      mimeType: "image/jpeg",
+    }));
+    const deps = createDeps({
+      getNextUnprocessedCapture: vi.fn(async () => ({
+        id: "curr-capture",
+        storagePath: "tenant/day/curr.jpg",
+        thumbnailPath: "tenant/day/curr_thumb.jpg",
+      })),
+      getCaptureById: vi.fn(async () => ({
+        id: "prev-capture",
+        storagePath: "tenant/day/prev.jpg",
+        thumbnailPath: "tenant/day/prev_thumb.jpg",
+      })),
+      downloadCapture,
+      diffScore: vi.fn(async () => 0.08), // notify
+      analyzeImages: vi.fn(async () => ({
+        text: JSON.stringify({ severity: "notify", summary: "大きな変化があります" }),
+        raw: {},
+        model: "gemini-2.5-flash",
+      })),
+    });
+
+    await runMonitorTick(REQUEST, deps);
+
+    // diff判定用にサムネイル2枚、AI解析用にフルサイズ2枚の、合計4回ダウンロードされる。
+    expect(downloadCapture).toHaveBeenCalledTimes(4);
+    expect(downloadCapture).toHaveBeenCalledWith("tenant/day/prev_thumb.jpg");
+    expect(downloadCapture).toHaveBeenCalledWith("tenant/day/curr_thumb.jpg");
+    expect(downloadCapture).toHaveBeenCalledWith("tenant/day/prev.jpg");
+    expect(downloadCapture).toHaveBeenCalledWith("tenant/day/curr.jpg");
+    expect(deps.analyzeImages).toHaveBeenCalledWith(
+      expect.objectContaining({
+        previousImageBuffer: Buffer.from("tenant/day/prev.jpg"),
+        imageBuffer: Buffer.from("tenant/day/curr.jpg"),
+      })
+    );
+  });
+
+  it("サムネイルが無い場合はminor/notifyでもフルサイズを再ダウンロードしない（既にフルサイズ取得済みのため使い回す）", async () => {
+    const downloadCapture = vi.fn(async (storagePath: string) => ({
+      buffer: Buffer.from(storagePath),
+      mimeType: "image/jpeg",
+    }));
+    const deps = createDeps({
+      getNextUnprocessedCapture: vi.fn(async () => ({
+        id: "curr-capture",
+        storagePath: "tenant/day/curr.jpg",
+        thumbnailPath: null,
+      })),
+      getCaptureById: vi.fn(async () => ({
+        id: "prev-capture",
+        storagePath: "tenant/day/prev.jpg",
+        thumbnailPath: null,
+      })),
+      downloadCapture,
+      diffScore: vi.fn(async () => 0.08), // notify
+      analyzeImages: vi.fn(async () => ({
+        text: JSON.stringify({ severity: "notify", summary: "大きな変化があります" }),
+        raw: {},
+        model: "gemini-2.5-flash",
+      })),
+    });
+
+    await runMonitorTick(REQUEST, deps);
+
+    expect(downloadCapture).toHaveBeenCalledTimes(2);
   });
 });

@@ -4,6 +4,7 @@ import { getActiveTenant } from "@/lib/auth/getActiveTenant";
 import { getViewerContext } from "@/lib/auth/getViewerContext";
 import { buildFriendInviteEmail } from "@/lib/email/buildFriendInviteEmail";
 import { sendEmail, type EmailClient } from "@/lib/email/sendEmail";
+import { buildFriendLinkPath } from "@/lib/line/friendLinkUrl";
 import { generateInviteToken, inviteExpiryDate } from "@/lib/line/inviteToken";
 import { createServerSupabase, createServiceSupabase } from "@/lib/supabase/server";
 import { parseFriendInviteBody } from "./parseBody";
@@ -88,7 +89,7 @@ export async function POST(req: Request) {
       continue;
     }
 
-    const inviteUrl = `${origin}/line-friend-invite/${inviteToken}`;
+    const inviteUrl = `${origin}${buildFriendLinkPath(inviteToken)}`;
     const { subject, html } = buildFriendInviteEmail({ tenantName, inviteUrl });
 
     const sendResult = await sendEmail({

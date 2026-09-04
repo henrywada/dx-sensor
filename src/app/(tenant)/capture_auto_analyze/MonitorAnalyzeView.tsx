@@ -143,6 +143,7 @@ type SavedSession = MonitorSession & { logCount: number; imageCount: number };
 type AutoCaptureRow = {
   id: string;
   storage_path: string;
+  thumbnail_path: string | null;
   created_at: string;
   processed_at: string | null;
 };
@@ -284,6 +285,9 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
   const [imagesLoading, setImagesLoading] = useState(false);
   const [imagesError, setImagesError] = useState<string | null>(null);
   const [imagePreview, setImagePreview] = useState<CaptureImage | null>(null);
+  // 一覧はサムネイルのURLしか持たないため、プレビューを開いた時だけ
+  // フルサイズの署名URLを別途取得する（egress削減のため常時は取得しない）。
+  const [imagePreviewFullUrl, setImagePreviewFullUrl] = useState<string | null>(null);
 
   const lastCurrCaptureIdRef = useRef<string | null>(null);
   const tickInFlightRef = useRef(false);
@@ -400,9 +404,11 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
     ): Promise<CaptureImage[]> => {
       return Promise.all(
         rows.map(async (row) => {
+          // 一覧表示は低解像度サムネイル（無ければフルサイズにフォールバック）を使う。
+          // フルサイズは画像プレビューを開いた時だけ別途取得する（egress削減のため）。
           const { data } = await supabase.storage
             .from("auto-captures")
-            .createSignedUrl(row.storage_path, 3600);
+            .createSignedUrl(row.thumbnail_path ?? row.storage_path, 3600);
           return {
             ...row,
             signedUrl: data?.signedUrl ?? null,
@@ -420,7 +426,7 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
 
     let query = supabase
       .from("auto_captures")
-      .select("id, storage_path, created_at, processed_at")
+      .select("id, storage_path, thumbnail_path, created_at, processed_at")
       .eq("tenant_id", tenantId)
       .eq("captured_by", userId)
       .order("created_at", { ascending: false })
@@ -571,8 +577,16 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
           console.error("deleteCaptureIfUnreferenced failed", error);
           return false;
         }
-        if (!data) return false;
-        await supabase.storage.from("auto-captures").remove([data as string]);
+        const deleted = data?.[0] as
+          | { storage_path: string | null; thumbnail_path: string | null }
+          | undefined;
+        if (!deleted?.storage_path) return false;
+        // フルサイズとサムネイルの両方を削除する（サムネイルを消し忘れると
+        // どのDB行からも参照されない孤立オブジェクトとしてStorageに残り続ける）。
+        const paths = [deleted.storage_path, deleted.thumbnail_path].filter(
+          (p): p is string => Boolean(p)
+        );
+        await supabase.storage.from("auto-captures").remove(paths);
         return true;
       },
 
@@ -732,6 +746,29 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
       void loadEvents();
     }
   }, [activeTab, loadEvents, loadImages]);
+
+  useEffect(() => {
+    // thumbnail_pathが無い画像は、一覧の signedUrl が既にフルサイズ
+    // （storage_path）を指している（attachSignedUrlsのフォールバック）ため、
+    // ここで取り直すと同じフルサイズ画像を二重にダウンロードしてしまう。
+    if (!imagePreview?.thumbnail_path) {
+      setImagePreviewFullUrl(null);
+      return;
+    }
+
+    let cancelled = false;
+    setImagePreviewFullUrl(null);
+    void (async () => {
+      const { data } = await supabase.storage
+        .from("auto-captures")
+        .createSignedUrl(imagePreview.storage_path, 3600);
+      if (!cancelled) setImagePreviewFullUrl(data?.signedUrl ?? null);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [imagePreview, supabase]);
 
   const runTick = useCallback(async () => {
     if (tickInFlightRef.current) return;
@@ -1917,7 +1954,8 @@ export function MonitorAnalyzeView({ tenantId, userId }: MonitorAnalyzeViewProps
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
               <NaturalAspectImage
-                src={imagePreview.signedUrl}
+                // フルサイズの取得が完了するまではサムネイルを表示し、届き次第切り替える。
+                src={imagePreviewFullUrl ?? imagePreview.signedUrl}
                 alt={
                   imagePreview.imageNo != null
                     ? `画像 #${imagePreview.imageNo}`

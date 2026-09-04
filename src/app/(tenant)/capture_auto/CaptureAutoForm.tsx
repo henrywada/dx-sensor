@@ -8,6 +8,7 @@ import {
   captureFrameFromVideo,
   type MountOrientation,
 } from "@/lib/capture/captureFrameFromVideo";
+import { createThumbnailBlob } from "@/lib/capture/createThumbnailBlob";
 import { CaptureHintModal } from "./CaptureHintModal";
 import { BaseCapturePhotoModal } from "./BaseCapturePhotoModal";
 
@@ -75,8 +76,12 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
 
       if (rpcError) throw rpcError;
 
-      const paths = ((deletedRows ?? []) as { storage_path: string | null }[])
-        .map((row) => row.storage_path)
+      // フルサイズとサムネイルの両方を削除する（サムネイルを消し忘れると
+      // どのDB行からも参照されない孤立オブジェクトとしてStorageに残り続ける）。
+      const paths = (
+        (deletedRows ?? []) as { storage_path: string | null; thumbnail_path: string | null }[]
+      )
+        .flatMap((row) => [row.storage_path, row.thumbnail_path])
         .filter((p): p is string => Boolean(p));
 
       if (paths.length > 0) {
@@ -248,7 +253,8 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
       });
 
       const dateSegment = new Date().toISOString().slice(0, 10);
-      const path = `${tenantId}/${dateSegment}/${crypto.randomUUID()}.jpg`;
+      const captureId = crypto.randomUUID();
+      const path = `${tenantId}/${dateSegment}/${captureId}.jpg`;
 
       const { error: uploadErrorResult } = await supabase.storage
         .from("auto-captures")
@@ -256,10 +262,30 @@ export function CaptureAutoForm({ tenantId, userId }: CaptureAutoFormProps) {
 
       if (uploadErrorResult) throw uploadErrorResult;
 
+      // サムネイルはベストエフォート：生成・アップロードに失敗しても本体の
+      // 自動撮影は継続する（監視tickのdiff計算・一覧表示はthumbnail_pathが
+      // 無ければstorage_path＝フルサイズにフォールバックできるため）。
+      let thumbnailPath: string | null = null;
+      try {
+        const thumbnailBlob = await createThumbnailBlob(canvas);
+        const thumbPath = `${tenantId}/${dateSegment}/${captureId}_thumb.jpg`;
+        const { error: thumbnailUploadError } = await supabase.storage
+          .from("auto-captures")
+          .upload(thumbPath, thumbnailBlob, { contentType: "image/jpeg" });
+        if (thumbnailUploadError) throw thumbnailUploadError;
+        thumbnailPath = thumbPath;
+      } catch (thumbnailErr) {
+        console.error(
+          "capture_auto thumbnail upload failed (falling back to full-size for diff)",
+          thumbnailErr
+        );
+      }
+
       const { error: insertError } = await supabase.from("auto_captures").insert({
         tenant_id: tenantId,
         captured_by: userId,
         storage_path: path,
+        thumbnail_path: thumbnailPath,
       });
 
       if (insertError) throw insertError;

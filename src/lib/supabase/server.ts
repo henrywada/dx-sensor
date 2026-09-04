@@ -34,7 +34,7 @@ export function createServerSupabase() {
  *  - LINE連携の認証フロー(api/line/webhook, api/line/invite-accept, api/line/liff-auth) —
  *    line_friends/tenant_member_invitesの読み書きとauth.users作成にservice_roleが必要なため
  *  - LINE友だち招待機能(api/tenant-members/friend-invites, api/line/friend-link-accept,
- *    /line-friend-invite/[token]) — line_friend_invites/line_friendsの読み書きと
+ *    /liff/friend-link/[token]) — line_friend_invites/line_friendsの読み書きと
  *    対象メンバーのメールアドレス解決にservice_roleが必要なため
  *  - api/signup/provision — セルフサインアップ時のtenants/tenant_members作成に
  *    service_roleが必要なため（authenticatedロールはtenantsへのinsertを許可されていない）

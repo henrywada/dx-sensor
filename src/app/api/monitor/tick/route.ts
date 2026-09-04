@@ -39,8 +39,12 @@ function parseMonitorTickRequest(body: unknown): MonitorTickRequest | null {
   return { prevCaptureId, title, email, labels, slotValues };
 }
 
-function toMonitorCapture(row: { id: string; storage_path: string }): MonitorCapture {
-  return { id: row.id, storagePath: row.storage_path };
+function toMonitorCapture(row: {
+  id: string;
+  storage_path: string;
+  thumbnail_path: string | null;
+}): MonitorCapture {
+  return { id: row.id, storagePath: row.storage_path, thumbnailPath: row.thumbnail_path };
 }
 
 export async function POST(req: Request) {
@@ -69,7 +73,7 @@ export async function POST(req: Request) {
     async getNextUnprocessedCapture(excludeId) {
       let query = supabase
         .from("auto_captures")
-        .select("id, storage_path")
+        .select("id, storage_path, thumbnail_path")
         .eq("tenant_id", tenant.tenantId)
         .eq("captured_by", viewer.userId)
         .is("processed_at", null)
@@ -89,7 +93,7 @@ export async function POST(req: Request) {
     async getCaptureById(id: string) {
       const { data, error } = await supabase
         .from("auto_captures")
-        .select("id, storage_path")
+        .select("id, storage_path, thumbnail_path")
         .eq("id", id)
         .eq("tenant_id", tenant.tenantId)
         .eq("captured_by", viewer.userId)
@@ -258,7 +262,7 @@ export async function POST(req: Request) {
       // ことでレースウィンドウを縮小している。RLS(auto_captures_delete_own)
       // はこの関数内でもそのまま効く。
       try {
-        const { data: storagePath, error: rpcError } = await supabase.rpc(
+        const { data, error: rpcError } = await supabase.rpc(
           "delete_capture_if_unreferenced",
           { p_capture_id: captureId }
         );
@@ -267,11 +271,19 @@ export async function POST(req: Request) {
           console.error("deleteCaptureIfUnreferenced: rpc failed", rpcError);
           return false;
         }
-        if (!storagePath) return false; // minor/notifyイベントから参照されている、または既に削除済み
+        const deleted = data?.[0] as
+          | { storage_path: string | null; thumbnail_path: string | null }
+          | undefined;
+        if (!deleted?.storage_path) return false; // minor/notifyイベントから参照されている、または既に削除済み
 
+        // フルサイズとサムネイルの両方を削除する（サムネイルを消し忘れると
+        // どのDB行からも参照されない孤立オブジェクトとしてStorageに残り続ける）。
+        const paths = [deleted.storage_path, deleted.thumbnail_path].filter(
+          (p): p is string => Boolean(p)
+        );
         const { error: storageError } = await supabase.storage
           .from(AUTO_CAPTURES_BUCKET)
-          .remove([storagePath]);
+          .remove(paths);
 
         if (storageError) {
           console.error("deleteCaptureIfUnreferenced: storage delete failed", storageError);

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getActiveTenant } from "@/lib/auth/getActiveTenant";
 import { getViewerContext } from "@/lib/auth/getViewerContext";
+import { buildFriendLinkPath } from "@/lib/line/friendLinkUrl";
 import { generateInviteToken, inviteExpiryDate } from "@/lib/line/inviteToken";
 import { createServiceSupabase } from "@/lib/supabase/server";
 import { buildSignupTenantIdentity } from "@/lib/tenant/signupTenantIdentity";
@@ -99,5 +100,5 @@ export async function POST() {
     return NextResponse.json({ error: "invite_creation_failed" }, { status: 500 });
   }
 
-  return NextResponse.json({ inviteUrl: `/line-friend-invite/${inviteToken}` });
+  return NextResponse.json({ inviteUrl: buildFriendLinkPath(inviteToken) });
 }
